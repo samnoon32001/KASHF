@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   Bell,
   Search,
@@ -7,10 +7,14 @@ import {
   User,
   LogOut,
   Sparkles,
+  CheckCircle2,
+  Clock,
   ExternalLink,
+  X,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { PWAInstallButton } from './PWAInstallButton';
+import { GlobalSearch } from './GlobalSearch';
 import { UserRole } from '../types';
 
 export const Header: React.FC<{ onToggleSidebar?: () => void }> = ({ onToggleSidebar }) => {
@@ -18,15 +22,38 @@ export const Header: React.FC<{ onToggleSidebar?: () => void }> = ({ onToggleSid
     currentUser,
     activeRole,
     settings,
+    notifications,
     unreadNotificationCount,
+    markNotificationRead,
+    markAllNotificationsRead,
     setGlobalSearchQuery,
-    switchRolePreview,
     handleLogout,
     setActiveTab,
   } = useApp();
 
   const [showUserMenu, setShowUserMenu] = useState(false);
-  const [showRoleSelector, setShowRoleSelector] = useState(false);
+  const [showNotifMenu, setShowNotifMenu] = useState(false);
+  const [showMobileSearch, setShowMobileSearch] = useState(false);
+
+  const userMenuRef = useRef<HTMLDivElement>(null);
+  const notifMenuRef = useRef<HTMLDivElement>(null);
+
+  // Close menus when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (userMenuRef.current && !userMenuRef.current.contains(event.target as Node)) {
+        setShowUserMenu(false);
+      }
+      if (notifMenuRef.current && !notifMenuRef.current.contains(event.target as Node)) {
+        setShowNotifMenu(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
 
   const roleLabels: Record<UserRole, { label: string; color: string }> = {
     super_admin: { label: 'Super Admin', color: 'bg-emerald-100 text-emerald-800 border-emerald-300' },
@@ -35,8 +62,12 @@ export const Header: React.FC<{ onToggleSidebar?: () => void }> = ({ onToggleSid
     faculty: { label: 'Faculty', color: 'bg-sky-100 text-sky-800 border-sky-300' },
     creative_head: { label: 'Creative Head', color: 'bg-amber-100 text-amber-800 border-amber-300' },
     telecaller: { label: 'Telecaller CRM', color: 'bg-indigo-100 text-indigo-800 border-indigo-300' },
-    student: { label: 'Student Portal', color: 'bg-blue-100 text-blue-800 border-blue-300' },
+    student: { label: 'Student', color: 'bg-blue-100 text-blue-800 border-blue-300' },
   };
+
+  const currentRoleInfo = roleLabels[activeRole] || { label: 'User', color: 'bg-slate-100 text-slate-800 border-slate-200' };
+
+  const appDisplayName = settings.appName || settings.institutionName || 'Kashf Institute of Islamic Excellence';
 
   return (
     <header
@@ -55,110 +86,137 @@ export const Header: React.FC<{ onToggleSidebar?: () => void }> = ({ onToggleSid
         </button>
 
         <div className="flex items-center gap-2.5">
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-[#117B78] to-[#0D9C88] text-white shadow-sm font-black text-lg tracking-wider">
-            K
-          </div>
+          {settings.logoUrl ? (
+            <img
+              src={settings.logoUrl}
+              alt="Logo"
+              className="h-9 w-9 object-contain rounded-xl"
+              onError={(e) => {
+                // fallback
+                (e.target as HTMLElement).style.display = 'none';
+              }}
+            />
+          ) : (
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-[#117B78] to-[#0D9C88] text-white shadow-sm font-black text-lg tracking-wider shrink-0">
+              {appDisplayName.charAt(0) || 'K'}
+            </div>
+          )}
           <div className="hidden sm:block">
-            <h1 className="text-sm sm:text-base tracking-tight text-slate-900 leading-none">
-              <strong className="font-extrabold text-slate-950">Kashf</strong>{' '}
-              <span className="font-medium text-slate-700">Institute of Islamic Excellence</span>
+            <h1 className="text-sm sm:text-base tracking-tight text-slate-900 leading-none truncate max-w-xs md:max-w-md font-bold">
+              {appDisplayName}
             </h1>
             <p className="text-[11px] font-semibold text-[#117B78] mt-0.5">
-              Portal & LMS
+              Portal & Management System
             </p>
           </div>
         </div>
       </div>
 
-      {/* Middle: Global Search Input */}
-      <div className="hidden md:flex flex-1 max-w-md mx-6">
-        <div className="relative w-full">
-          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-          <input
-            id="global-search-input"
-            type="text"
-            placeholder="Search students, faculty, courses, leads, tasks..."
-            onChange={(e) => setGlobalSearchQuery(e.target.value)}
-            className="w-full h-10 rounded-xl border border-slate-200 bg-slate-50/80 pl-10 pr-4 text-xs font-medium text-slate-800 placeholder-slate-400 focus:bg-white focus:border-[#117B78] focus:outline-none focus:ring-2 focus:ring-[#117B78]/15 transition"
-          />
-        </div>
+      {/* Middle: Global Search Input (Desktop) */}
+      <div className="hidden md:flex flex-1 max-w-lg mx-6">
+        <GlobalSearch />
       </div>
 
-      {/* Right: Role Previewer, PWA Install, Notifications, User Profile */}
+      {/* Right: PWA Install, Notifications, User Profile */}
       <div className="flex items-center gap-2 sm:gap-3">
-        {/* Quick Role Switcher Pill */}
-        <div className="relative">
-          <button
-            id="role-preview-selector-btn"
-            onClick={() => setShowRoleSelector(!showRoleSelector)}
-            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-semibold shadow-xs cursor-pointer transition hover:opacity-90 ${
-              roleLabels[activeRole]?.color || 'bg-slate-100 text-slate-800 border-slate-200'
-            }`}
-            title="Switch demo role to preview different dashboards"
-          >
-            <Shield className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">{roleLabels[activeRole]?.label}</span>
-            <span className="sm:hidden font-mono">{activeRole.slice(0, 3).toUpperCase()}</span>
-          </button>
-
-          {showRoleSelector && (
-            <div className="absolute right-0 mt-2 w-56 rounded-2xl bg-white p-2 shadow-2xl border border-slate-200 z-50 animate-in fade-in zoom-in-95">
-              <div className="px-3 py-2 border-b border-slate-100">
-                <p className="text-xs font-bold text-slate-900 uppercase tracking-wider">Switch Preview Role</p>
-                <p className="text-[11px] text-slate-500">Test different user experiences</p>
-              </div>
-              <div className="py-1 space-y-0.5">
-                {(Object.keys(roleLabels) as UserRole[]).map((role) => (
-                  <button
-                    key={role}
-                    onClick={() => {
-                      switchRolePreview(role);
-                      setShowRoleSelector(false);
-                    }}
-                    className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium transition text-left cursor-pointer ${
-                      activeRole === role
-                        ? 'bg-[#117B78]/10 text-[#117B78] font-bold'
-                        : 'text-slate-700 hover:bg-slate-100'
-                    }`}
-                  >
-                    <span>{roleLabels[role].label}</span>
-                    {activeRole === role && <span className="h-2 w-2 rounded-full bg-[#117B78]" />}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
+        {/* Mobile Search Button */}
+        <button
+          onClick={() => setShowMobileSearch(true)}
+          className="flex md:hidden h-10 w-10 items-center justify-center rounded-xl text-slate-600 hover:bg-slate-100 transition cursor-pointer"
+          aria-label="Open global search"
+          title="Search students, courses, tasks, CRM leads"
+        >
+          <Search className="w-5 h-5" />
+        </button>
 
         {/* PWA Install Button */}
         <div className="hidden sm:block">
           <PWAInstallButton compact={true} />
         </div>
 
-        {/* Notification Bell */}
-        <button
-          id="notification-bell-btn"
-          onClick={() => setActiveTab('notifications')}
-          className="relative flex h-10 w-10 items-center justify-center rounded-xl text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition cursor-pointer"
-          aria-label="View notifications"
-        >
-          <Bell className="w-5 h-5" />
-          {unreadNotificationCount > 0 && (
-            <span
-              id="unread-notification-badge"
-              className="absolute top-2 right-2 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white shadow-xs"
-            >
-              {unreadNotificationCount}
-            </span>
-          )}
-        </button>
+        {/* Notification Bell Dropdown */}
+        <div className="relative" ref={notifMenuRef}>
+          <button
+            id="notification-bell-btn"
+            onClick={() => setShowNotifMenu(!showNotifMenu)}
+            className="relative flex h-10 w-10 items-center justify-center rounded-xl text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition cursor-pointer"
+            aria-label="View notifications"
+          >
+            <Bell className="w-5 h-5" />
+            {unreadNotificationCount > 0 && (
+              <span
+                id="unread-notification-badge"
+                className="absolute top-2 right-2 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white shadow-xs"
+              >
+                {unreadNotificationCount}
+              </span>
+            )}
+          </button>
 
-        {/* User Profile Avatar / Dropdown */}
-        <div className="relative">
+          {showNotifMenu && (
+            <div className="absolute right-0 mt-2 w-80 sm:w-96 rounded-2xl bg-white p-3 shadow-2xl border border-slate-200 z-50 animate-in fade-in zoom-in-95">
+              <div className="flex items-center justify-between pb-2 border-b border-slate-100 px-1">
+                <div>
+                  <h4 className="text-xs font-bold text-slate-900">Notifications</h4>
+                  <p className="text-[11px] text-slate-500">{unreadNotificationCount} unread alerts</p>
+                </div>
+                {unreadNotificationCount > 0 && (
+                  <button
+                    onClick={markAllNotificationsRead}
+                    className="text-[11px] font-bold text-[#117B78] hover:underline cursor-pointer"
+                  >
+                    Mark all read
+                  </button>
+                )}
+              </div>
+
+              <div className="max-h-72 overflow-y-auto py-2 space-y-2">
+                {notifications.slice(0, 6).map((n) => (
+                  <div
+                    key={n.id}
+                    onClick={() => markNotificationRead(n.id)}
+                    className={`p-2.5 rounded-xl border text-xs transition cursor-pointer ${
+                      n.read
+                        ? 'border-slate-100 bg-slate-50/50 text-slate-600'
+                        : 'border-[#117B78]/20 bg-[#117B78]/5 text-slate-800'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between font-bold">
+                      <span className="truncate">{n.title}</span>
+                      {!n.read && <span className="h-2 w-2 rounded-full bg-[#117B78]" />}
+                    </div>
+                    <p className="text-[11px] text-slate-500 mt-1 line-clamp-2">{n.message}</p>
+                  </div>
+                ))}
+                {notifications.length === 0 && (
+                  <div className="text-center py-6 text-xs text-slate-400">
+                    No new notifications
+                  </div>
+                )}
+              </div>
+
+              <div className="pt-2 border-t border-slate-100 text-center">
+                <button
+                  onClick={() => {
+                    setActiveTab('notifications');
+                    setShowNotifMenu(false);
+                  }}
+                  className="text-xs font-bold text-[#117B78] hover:underline cursor-pointer"
+                >
+                  View All Notifications Center →
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* User Profile Avatar / Dropdown (With Outside Click auto-close) */}
+        <div className="relative" ref={userMenuRef}>
           <button
             id="user-profile-menu-btn"
             onClick={() => setShowUserMenu(!showUserMenu)}
             className="flex items-center gap-2 rounded-xl p-1 text-left hover:bg-slate-100 transition cursor-pointer"
+            aria-expanded={showUserMenu}
           >
             {currentUser?.photoUrl ? (
               <img
@@ -172,7 +230,7 @@ export const Header: React.FC<{ onToggleSidebar?: () => void }> = ({ onToggleSid
               </div>
             )}
             <div className="hidden lg:block text-left pr-1">
-              <p className="text-xs font-bold text-slate-800 leading-tight truncate max-w-[110px]">
+              <p className="text-xs font-bold text-slate-800 leading-tight truncate max-w-[120px]">
                 {currentUser?.name || 'User'}
               </p>
               <p className="text-[10px] font-medium text-slate-500 capitalize leading-none">
@@ -185,13 +243,13 @@ export const Header: React.FC<{ onToggleSidebar?: () => void }> = ({ onToggleSid
             <div className="absolute right-0 mt-2 w-64 rounded-2xl bg-white p-2 shadow-2xl border border-slate-200 z-50 animate-in fade-in zoom-in-95">
               <div className="px-3.5 py-3 border-b border-slate-100">
                 <p className="text-xs font-bold text-slate-900 truncate">{currentUser?.name}</p>
-                <p className="text-xs text-slate-500 truncate">{currentUser?.email}</p>
+                <p className="text-[11px] text-slate-500 truncate">{currentUser?.email || currentUser?.username}</p>
                 <div className="mt-2 inline-flex items-center gap-1.5 rounded-md bg-[#117B78]/10 px-2 py-0.5 text-[11px] font-semibold text-[#117B78]">
-                  <span>Role: {roleLabels[activeRole]?.label}</span>
+                  <span>Role: {currentRoleInfo.label}</span>
                 </div>
               </div>
 
-              <div className="py-1">
+              <div className="py-1 space-y-0.5">
                 <button
                   id="menu-settings-btn"
                   onClick={() => {
@@ -220,6 +278,27 @@ export const Header: React.FC<{ onToggleSidebar?: () => void }> = ({ onToggleSid
           )}
         </div>
       </div>
+
+      {/* Mobile Global Search Modal Overlay */}
+      {showMobileSearch && (
+        <div className="fixed inset-0 z-50 flex flex-col bg-slate-950/50 backdrop-blur-xs p-4 md:hidden animate-in fade-in">
+          <div className="w-full bg-white rounded-3xl p-4 shadow-2xl border border-slate-200 space-y-3 animate-in zoom-in-95">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+              <span className="text-xs font-bold text-slate-800">Global Search</span>
+              <button
+                onClick={() => setShowMobileSearch(false)}
+                className="p-1 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <GlobalSearch
+              isMobileModal={true}
+              onCloseMobileModal={() => setShowMobileSearch(false)}
+            />
+          </div>
+        </div>
+      )}
     </header>
   );
 };

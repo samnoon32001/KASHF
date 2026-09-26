@@ -87,13 +87,13 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen = false, onClose }) => 
         },
         {
           id: 'attendance',
-          label: isStudent ? 'My Attendance' : 'Attendance Log',
+          label: isStudent ? 'My Attendance' : 'Attendance & Reports',
           icon: ClipboardCheck,
           permission: 'attendance.view',
         },
         {
           id: 'students',
-          label: 'Student Roster',
+          label: 'Students',
           icon: GraduationCap,
           permission: 'students.view',
           hideForStudent: true,
@@ -179,6 +179,12 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen = false, onClose }) => 
           hideForStudent: true,
         },
         {
+          id: 'notifications',
+          label: 'Notifications',
+          icon: Bell,
+          badge: unreadNotificationCount > 0 ? unreadNotificationCount : undefined,
+        },
+        {
           id: 'settings',
           label: 'System Settings',
           icon: Settings,
@@ -188,6 +194,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen = false, onClose }) => 
       ],
     },
   ];
+
+  const appDisplayName = settings.appName || settings.institutionName || 'Kashf Institute';
 
   return (
     <>
@@ -210,15 +218,26 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen = false, onClose }) => 
         {/* Top Branding Section */}
         <div className="flex h-16 items-center justify-between border-b border-slate-100 px-5">
           <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-[#117B78] to-[#0D9C88] text-white shadow-sm font-black text-lg shrink-0">
-              K
-            </div>
+            {settings.logoUrl ? (
+              <img
+                src={settings.logoUrl}
+                alt="Logo"
+                className="h-9 w-9 object-contain rounded-xl shrink-0"
+                onError={(e) => {
+                  (e.target as HTMLElement).style.display = 'none';
+                }}
+              />
+            ) : (
+              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-[#117B78] to-[#0D9C88] text-white shadow-sm font-black text-lg shrink-0">
+                {appDisplayName.charAt(0) || 'K'}
+              </div>
+            )}
             <div className="min-w-0">
               <span className="text-sm font-black tracking-tight text-slate-950 block truncate leading-tight">
-                Kashf
+                {appDisplayName}
               </span>
               <span className="block text-[10px] font-medium text-slate-500 tracking-tight leading-tight truncate">
-                Institute of Islamic Excellence
+                {settings.institutionName || 'Institute of Islamic Excellence'}
               </span>
             </div>
           </div>

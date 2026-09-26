@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   UserCheck,
   Phone,
@@ -31,11 +31,25 @@ export const LeadsCRMView: React.FC = () => {
     enrollLeadAsStudent,
     currentUser,
     exportToCSV,
+    globalSearchQuery,
   } = useApp();
 
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchQuery, setSearchQuery] = useState(globalSearchQuery || '');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [selectedLead, setSelectedLead] = useState<Lead | null>(leads[0] || null);
+
+  useEffect(() => {
+    if (globalSearchQuery) {
+      setSearchQuery(globalSearchQuery);
+      const match = leads.find(
+        (l) =>
+          l.name.toLowerCase().includes(globalSearchQuery.toLowerCase()) ||
+          l.phone.includes(globalSearchQuery) ||
+          (l.email && l.email.toLowerCase().includes(globalSearchQuery.toLowerCase()))
+      );
+      if (match) setSelectedLead(match);
+    }
+  }, [globalSearchQuery, leads]);
   const [showAddModal, setShowAddModal] = useState(false);
   const [newNoteText, setNewNoteText] = useState('');
   const [viewMode, setViewMode] = useState<'pipeline' | 'table'>('pipeline');

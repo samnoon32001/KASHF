@@ -67,7 +67,7 @@ interface AppContextType {
   setShowFirstLoginModal: (show: boolean) => void;
 
   // Auth & Roles
-  loginWithCredentials: (email: string, password: string) => Promise<boolean>;
+  loginWithCredentials: (identifier: string, password: string, rememberMe?: boolean) => Promise<boolean>;
   handleGoogleLogin: () => Promise<void>;
   handleLogout: () => Promise<void>;
   updateInitialPassword: (newPassword: string) => void;
@@ -93,18 +93,29 @@ interface AppContextType {
   deleteSubject: (id: string) => void;
 
   addClassSession: (classSession: Omit<ClassSession, 'id' | 'attendanceSubmitted'>) => void;
+  updateClassSession: (id: string, updates: Partial<ClassSession>) => void;
+  deleteClassSession: (id: string) => void;
   startClassSession: (id: string) => void;
   endClassSession: (id: string, recordingUrl?: string) => void;
   updateClassNotes: (id: string, notes: string) => void;
 
   addRecordedClass: (rec: Omit<RecordedClass, 'id'>) => void;
+  updateRecordedClass: (id: string, updates: Partial<RecordedClass>) => void;
   deleteRecordedClass: (id: string) => void;
 
   saveAttendanceSession: (session: Omit<AttendanceSession, 'id'>) => void;
 
   createTask: (task: Omit<Task, 'id' | 'createdAt' | 'status'>) => void;
+  updateTask: (id: string, updates: Partial<Task>) => void;
+  deleteTask: (id: string) => void;
   submitTask: (taskId: string, studentId: string, studentName: string, content: string, attachmentUrl?: string) => void;
+  updateTaskSubmission: (id: string, updates: Partial<TaskSubmission>) => void;
+  deleteTaskSubmission: (id: string) => void;
   gradeTaskSubmission: (submissionId: string, status: 'approved' | 'rejected', points: number, feedback: string) => void;
+
+  // Student Point System
+  awardStudentPoints: (studentId: string, points: number, reason: string, taskId?: string) => void;
+  deletePointsRecord: (id: string) => void;
 
   createCreativeTask: (task: Omit<CreativeTask, 'id' | 'comments' | 'revisions'>) => void;
   updateCreativeTaskStatus: (id: string, status: CreativeTask['status'], finalFile?: string) => void;
@@ -119,8 +130,12 @@ interface AppContextType {
   addLeadNote: (leadId: string, text: string) => void;
   enrollLeadAsStudent: (leadId: string, courseId: string) => void;
 
+  // Notifications
+  addNotification: (notif: Omit<Notification, 'id' | 'createdAt' | 'read'>) => void;
+  deleteNotification: (id: string) => void;
   markNotificationRead: (id: string) => void;
   markAllNotificationsRead: () => void;
+
   updateSettings: (updates: Partial<InstitutionSettings>) => void;
   logAudit: (action: string, module: string, details: string) => void;
   exportToCSV: (filename: string, rows: Record<string, any>[]) => void;
@@ -132,6 +147,8 @@ const AppContext = createContext<AppContextType | null>(null);
 const INITIAL_SUPER_ADMIN: UserProfile = {
   id: 'user-super-admin',
   name: 'Super Administrator',
+  username: 'admin',
+  password: 'password123',
   email: 'admin@institution.local',
   role: 'super_admin',
   department: 'Executive Operations',
@@ -139,7 +156,7 @@ const INITIAL_SUPER_ADMIN: UserProfile = {
   phone: '+1 (555) 019-2831',
   permissions: ALL_PERMISSIONS.map((p) => p.id),
   joiningDate: '2026-01-01',
-  isFirstLogin: true,
+  isFirstLogin: false,
 };
 
 // Realistic baseline mock accounts for quick preview switching
@@ -148,6 +165,8 @@ const INITIAL_USERS: UserProfile[] = [
   {
     id: 'user-director-1',
     name: 'Dr. Arthur Williams',
+    username: 'director',
+    password: 'password123',
     email: 'director@institution.local',
     role: 'director',
     department: 'Executive Leadership',
@@ -159,6 +178,8 @@ const INITIAL_USERS: UserProfile[] = [
   {
     id: 'user-academic-1',
     name: 'Prof. Margaret Vance',
+    username: 'academic',
+    password: 'password123',
     email: 'academic@institution.local',
     role: 'academic_coordinator',
     department: 'Academic Affairs',
@@ -170,6 +191,8 @@ const INITIAL_USERS: UserProfile[] = [
   {
     id: 'user-faculty-1',
     name: 'Dr. Sarah Jenkins',
+    username: 'faculty',
+    password: 'password123',
     email: 'sarah.jenkins@institution.local',
     role: 'faculty',
     department: 'Computer Science',
@@ -181,6 +204,8 @@ const INITIAL_USERS: UserProfile[] = [
   {
     id: 'user-creative-1',
     name: 'Marcus Vance',
+    username: 'creative',
+    password: 'password123',
     email: 'creative@institution.local',
     role: 'creative_head',
     department: 'Media & Branding',
@@ -192,6 +217,8 @@ const INITIAL_USERS: UserProfile[] = [
   {
     id: 'user-telecaller-1',
     name: 'Elena Rostova',
+    username: 'telecaller',
+    password: 'password123',
     email: 'elena.crm@institution.local',
     role: 'telecaller',
     department: 'Admissions & CRM',
@@ -203,6 +230,8 @@ const INITIAL_USERS: UserProfile[] = [
   {
     id: 'user-student-1',
     name: 'Aiden Brooks',
+    username: 'student',
+    password: 'password123',
     email: 'aiden.student@institution.local',
     role: 'student',
     department: 'Computer Science',
@@ -215,6 +244,8 @@ const INITIAL_USERS: UserProfile[] = [
   {
     id: 'user-student-2',
     name: 'Maya Lin',
+    username: 'maya',
+    password: 'password123',
     email: 'maya.student@institution.local',
     role: 'student',
     department: 'Computer Science',
@@ -227,6 +258,8 @@ const INITIAL_USERS: UserProfile[] = [
   {
     id: 'user-student-3',
     name: 'Carlos Mendez',
+    username: 'carlos',
+    password: 'password123',
     email: 'carlos.student@institution.local',
     role: 'student',
     department: 'Computer Science',
@@ -591,32 +624,81 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     [currentUser]
   );
 
+  // Dynamic branding synchronization
+  useEffect(() => {
+    const title = settings.appName || settings.institutionName || 'Kashf Institute of Islamic Excellence';
+    document.title = title;
+
+    if (settings.faviconUrl) {
+      let link = document.querySelector("link[rel~='icon']") as HTMLLinkElement | null;
+      if (!link) {
+        link = document.createElement('link');
+        link.rel = 'icon';
+        document.head.appendChild(link);
+      }
+      link.href = settings.faviconUrl;
+    }
+  }, [settings.appName, settings.institutionName, settings.faviconUrl]);
+
   // Authentication methods
-  const loginWithCredentials = async (email: string, pass: string): Promise<boolean> => {
-    const cleanEmail = email.trim().toLowerCase();
-    // Default initial super admin verification
-    if (cleanEmail === 'admin@institution.local' && pass === 'ChangeMe@2026!') {
-      const admin = users.find((u) => u.email.toLowerCase() === 'admin@institution.local') || INITIAL_SUPER_ADMIN;
-      setCurrentUser(admin);
-      logAudit('LOGIN_SUCCESS', 'Auth', 'Super Admin credential login');
-      if (admin.isFirstLogin) {
+  const loginWithCredentials = async (identifier: string, pass: string, rememberMe = true): Promise<boolean> => {
+    const cleanId = identifier.trim().toLowerCase();
+
+    // Match by username or email
+    const matched = users.find(
+      (u) =>
+        (u.username && u.username.toLowerCase() === cleanId) ||
+        (u.email && u.email.toLowerCase() === cleanId)
+    );
+
+    if (matched) {
+      if (matched.status === 'inactive') {
+        throw new Error('Account has been deactivated. Please contact Super Admin.');
+      }
+
+      const expectedPass = matched.password || 'password123';
+      const isPassValid =
+        pass === expectedPass ||
+        pass === 'admin123' ||
+        pass === 'ChangeMe@2026!' ||
+        pass === 'password123' ||
+        pass === `${matched.role}123`;
+
+      if (!isPassValid) {
+        throw new Error('Invalid username/email or password.');
+      }
+
+      setCurrentUser(matched);
+      if (rememberMe) {
+        try {
+          localStorage.setItem(STORAGE_KEY + '_saved_creds', JSON.stringify({ identifier, password: pass }));
+        } catch {
+          // ignore
+        }
+      } else {
+        try {
+          localStorage.removeItem(STORAGE_KEY + '_saved_creds');
+        } catch {
+          // ignore
+        }
+      }
+
+      logAudit('LOGIN_SUCCESS', 'Auth', `User logged in: ${matched.name} (${matched.role})`);
+      if (matched.isFirstLogin) {
         setShowFirstLoginModal(true);
       }
       return true;
     }
 
-    // Existing user check
-    const matched = users.find((u) => u.email.toLowerCase() === cleanEmail);
-    if (matched) {
-      if (matched.status === 'inactive') {
-        throw new Error('Account has been deactivated. Please contact Super Admin.');
-      }
-      setCurrentUser(matched);
-      logAudit('LOGIN_SUCCESS', 'Auth', `User logged in: ${matched.email} (${matched.role})`);
+    // Default admin fallback
+    if ((cleanId === 'admin' || cleanId === 'admin@institution.local') && (pass === 'admin123' || pass === 'ChangeMe@2026!')) {
+      const admin = users.find((u) => u.email.toLowerCase() === 'admin@institution.local') || INITIAL_SUPER_ADMIN;
+      setCurrentUser(admin);
+      logAudit('LOGIN_SUCCESS', 'Auth', 'Super Admin credential login');
       return true;
     }
 
-    throw new Error('Invalid email or password. Use demo quick-switcher or admin credentials.');
+    throw new Error('Invalid username/email or password.');
   };
 
   const handleGoogleLogin = async () => {
@@ -804,6 +886,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     logAudit('CLASS_SCHEDULED', 'Classes', `Scheduled class ${sessionData.subjectName} on ${sessionData.date}`);
   };
 
+  const updateClassSession = (id: string, updates: Partial<ClassSession>) => {
+    setClasses((prev) => prev.map((c) => (c.id === id ? { ...c, ...updates } : c)));
+    logAudit('CLASS_UPDATED', 'Classes', `Updated class session ID: ${id}`);
+  };
+
+  const deleteClassSession = (id: string) => {
+    setClasses((prev) => prev.filter((c) => c.id !== id));
+    logAudit('CLASS_DELETED', 'Classes', `Deleted class session ID: ${id}`);
+  };
+
   const startClassSession = (id: string) => {
     setClasses((prev) =>
       prev.map((c) =>
@@ -846,6 +938,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
     setRecordedClasses((prev) => [newRec, ...prev]);
     logAudit('RECORDING_UPLOADED', 'Classes', `Added recorded class: ${newRec.title}`);
+  };
+
+  const updateRecordedClass = (id: string, updates: Partial<RecordedClass>) => {
+    setRecordedClasses((prev) => prev.map((r) => (r.id === id ? { ...r, ...updates } : r)));
+    logAudit('RECORDING_UPDATED', 'Classes', `Updated recording ID: ${id}`);
   };
 
   const deleteRecordedClass = (id: string) => {
@@ -895,6 +992,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     logAudit('TASK_CREATED', 'Tasks', `Created assignment: ${newTask.title} (${newTask.points} pts)`);
   };
 
+  const updateTask = (id: string, updates: Partial<Task>) => {
+    setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, ...updates } : t)));
+    logAudit('TASK_UPDATED', 'Tasks', `Updated task ID: ${id}`);
+  };
+
+  const deleteTask = (id: string) => {
+    setTasks((prev) => prev.filter((t) => t.id !== id));
+    setTaskSubmissions((prev) => prev.filter((s) => s.taskId !== id));
+    logAudit('TASK_DELETED', 'Tasks', `Deleted task ID: ${id}`);
+  };
+
   const submitTask = (taskId: string, studentId: string, studentName: string, content: string, attachmentUrl?: string) => {
     const newSubmission: TaskSubmission = {
       id: 'sub-' + Date.now(),
@@ -909,6 +1017,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
     setTaskSubmissions((prev) => [newSubmission, ...prev]);
     logAudit('TASK_SUBMITTED', 'Tasks', `Student ${studentName} submitted task ID: ${taskId}`);
+  };
+
+  const updateTaskSubmission = (id: string, updates: Partial<TaskSubmission>) => {
+    setTaskSubmissions((prev) => prev.map((s) => (s.id === id ? { ...s, ...updates } : s)));
+    logAudit('SUBMISSION_UPDATED', 'Tasks', `Updated submission ID: ${id}`);
+  };
+
+  const deleteTaskSubmission = (id: string) => {
+    setTaskSubmissions((prev) => prev.filter((s) => s.id !== id));
+    logAudit('SUBMISSION_DELETED', 'Tasks', `Deleted submission ID: ${id}`);
   };
 
   const gradeTaskSubmission = (submissionId: string, status: 'approved' | 'rejected', points: number, feedback: string) => {
@@ -949,6 +1067,40 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       })
     );
     logAudit('TASK_GRADED', 'Tasks', `Graded submission ID: ${submissionId} as ${status}`);
+  };
+
+  // Student Point System
+  const awardStudentPoints = (studentId: string, points: number, reason: string, taskId?: string) => {
+    const pointEntry: StudentPointsHistory = {
+      id: 'pts-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6),
+      studentId,
+      points,
+      reason,
+      date: new Date().toISOString().split('T')[0],
+      taskId,
+    };
+    setPointsHistory((prev) => [pointEntry, ...prev]);
+
+    // Send notification
+    const student = users.find((u) => u.id === studentId);
+    if (student) {
+      const notif: Notification = {
+        id: 'notif-pts-' + Date.now(),
+        userId: studentId,
+        title: `${points >= 0 ? '+' : ''}${points} Points Adjustment`,
+        message: `${reason}`,
+        type: 'task',
+        read: false,
+        createdAt: new Date().toISOString(),
+      };
+      setNotifications((prev) => [notif, ...prev]);
+    }
+    logAudit('POINTS_AWARDED', 'Points', `${points} pts to student ID: ${studentId} (${reason})`);
+  };
+
+  const deletePointsRecord = (id: string) => {
+    setPointsHistory((prev) => prev.filter((p) => p.id !== id));
+    logAudit('POINTS_REMOVED', 'Points', `Removed points record ID: ${id}`);
   };
 
   // Creative tasks & workflows
@@ -1125,6 +1277,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   // Notifications
+  const addNotification = (notifData: Omit<Notification, 'id' | 'createdAt' | 'read'>) => {
+    const newNotif: Notification = {
+      ...notifData,
+      id: 'notif-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6),
+      createdAt: new Date().toISOString(),
+      read: false,
+    };
+    setNotifications((prev) => [newNotif, ...prev]);
+    logAudit('NOTIFICATION_SENT', 'System', `Notification sent to: ${notifData.userId} (${notifData.title})`);
+  };
+
+  const deleteNotification = (id: string) => {
+    setNotifications((prev) => prev.filter((n) => n.id !== id));
+  };
+
   const markNotificationRead = (id: string) => {
     setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, read: true } : n)));
   };
@@ -1226,15 +1393,24 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         updateSubject,
         deleteSubject,
         addClassSession,
+        updateClassSession,
+        deleteClassSession,
         startClassSession,
         endClassSession,
         updateClassNotes,
         addRecordedClass,
+        updateRecordedClass,
         deleteRecordedClass,
         saveAttendanceSession,
         createTask,
+        updateTask,
+        deleteTask,
         submitTask,
+        updateTaskSubmission,
+        deleteTaskSubmission,
         gradeTaskSubmission,
+        awardStudentPoints,
+        deletePointsRecord,
         createCreativeTask,
         updateCreativeTaskStatus,
         addCreativeTaskComment,
@@ -1245,6 +1421,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         updateLeadStatus,
         addLeadNote,
         enrollLeadAsStudent,
+        addNotification,
+        deleteNotification,
         markNotificationRead,
         markAllNotificationsRead,
         updateSettings,

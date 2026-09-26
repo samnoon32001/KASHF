@@ -1,9 +1,11 @@
 import { Course, Subject, ClassSession, RecordedClass, Task, CreativeTask, MediaItem, Lead, InstitutionSettings } from '../types';
 
 export const INITIAL_SETTINGS: InstitutionSettings = {
+  appName: 'Kashf Institute of Islamic Excellence',
   institutionName: 'Kashf Institute of Islamic Excellence',
   tagline: 'Fostering academic rigor, moral character, and Islamic scholarship',
   logoUrl: '',
+  faviconUrl: '',
   primaryColor: '#117B78',
   secondaryColor: '#0D9C88',
   contactEmail: 'contact@kashf.edu',

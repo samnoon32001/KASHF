@@ -21,15 +21,21 @@ import { useApp } from '../context/AppContext';
 import { RoleType } from '../types';
 import { ROLE_DEFAULT_PERMISSIONS } from '../data/permissions';
 
-export const SettingsView: React.FC = () => {
-  const { currentUser, activeRole, can } = useApp();
+export const SettingsView: React.FC<{ initialTab?: 'general' | 'roles' | 'integrations' | 'notifications' }> = ({ initialTab = 'general' }) => {
+  const { currentUser, activeRole, can, settings, updateSettings } = useApp();
 
-  const [activeTab, setActiveTab] = useState<'general' | 'roles' | 'integrations' | 'notifications'>('general');
+  const [activeTab, setActiveTab] = useState<'general' | 'roles' | 'integrations' | 'notifications'>(initialTab);
 
-  // Institution profile form state
-  const [institutionName, setInstitutionName] = useState('Kashf Institute of Islamic Excellence');
+  // Institution profile & branding form state
+  const [appName, setAppName] = useState(settings.appName || 'Kashf Institute of Islamic Excellence');
+  const [institutionName, setInstitutionName] = useState(settings.institutionName || 'Kashf Institute of Islamic Excellence');
+  const [logoUrl, setLogoUrl] = useState(settings.logoUrl || '');
+  const [faviconUrl, setFaviconUrl] = useState(settings.faviconUrl || '');
+  const [tagline, setTagline] = useState(settings.tagline || 'Fostering academic rigor, moral character, and Islamic scholarship');
   const [institutionCode, setInstitutionCode] = useState('KASHF-2026');
-  const [contactEmail, setContactEmail] = useState('administration@kashf.edu');
+  const [contactEmail, setContactEmail] = useState(settings.contactEmail || 'administration@kashf.edu');
+  const [contactPhone, setContactPhone] = useState(settings.contactPhone || '+1 (555) 328-9000');
+  const [address, setAddress] = useState(settings.address || 'Kashf Campus of Islamic Excellence');
   const [academicYear, setAcademicYear] = useState('2026 - 2027 Academic Session');
   const [savedSuccess, setSavedSuccess] = useState(false);
 
@@ -57,6 +63,16 @@ export const SettingsView: React.FC = () => {
 
   const handleSaveProfile = (e: React.FormEvent) => {
     e.preventDefault();
+    updateSettings({
+      appName,
+      institutionName,
+      logoUrl,
+      faviconUrl,
+      tagline,
+      contactEmail,
+      contactPhone,
+      address,
+    });
     setSavedSuccess(true);
     setTimeout(() => setSavedSuccess(false), 2500);
   };
@@ -140,72 +156,204 @@ export const SettingsView: React.FC = () => {
         </div>
       )}
 
-      {/* 1. GENERAL TAB */}
+      {/* 1. GENERAL & BRANDING TAB */}
       {activeTab === 'general' && (
-        <div className="rounded-3xl bg-white border border-slate-200 p-6 sm:p-8 shadow-xs max-w-2xl space-y-5">
-          <h3 className="text-base font-bold text-slate-900">Institution Identity & Term</h3>
-
-          <form onSubmit={handleSaveProfile} className="space-y-4">
-            <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">
-                Official Institution Name
-              </label>
-              <input
-                type="text"
-                value={institutionName}
-                onChange={(e) => setInstitutionName(e.target.value)}
-                className="w-full h-11 rounded-xl border border-slate-200 px-3.5 text-xs font-medium text-slate-900 outline-none focus:border-[#117B78]"
-              />
+        <div className="max-w-3xl space-y-6">
+          {/* Branding Card */}
+          <div className="rounded-3xl bg-white border border-slate-200 p-6 sm:p-8 shadow-xs space-y-6">
+            <div className="border-b border-slate-100 pb-4">
+              <h3 className="text-base font-bold text-slate-900">App Branding & Visual Identity</h3>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Customize your App Name, Top/Sidebar Logo, and Browser Favicon Icon in real-time.
+              </p>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <form onSubmit={handleSaveProfile} className="space-y-5">
+              {/* App Name */}
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Institution Code
+                <label className="block text-xs font-bold text-slate-800 mb-1">
+                  Application Display Name
                 </label>
                 <input
                   type="text"
-                  value={institutionCode}
-                  onChange={(e) => setInstitutionCode(e.target.value)}
-                  className="w-full h-11 rounded-xl border border-slate-200 px-3.5 text-xs font-medium text-slate-900 outline-none focus:border-[#117B78]"
+                  value={appName}
+                  onChange={(e) => setAppName(e.target.value)}
+                  placeholder="e.g. Kashf Institute of Islamic Excellence"
+                  className="w-full h-11 rounded-xl border border-slate-200 px-3.5 text-xs font-semibold text-slate-900 outline-none focus:border-[#117B78] focus:ring-2 focus:ring-[#117B78]/15"
                 />
+                <p className="text-[11px] text-slate-400 mt-1">
+                  This updates the header title, sidebar brand, and browser window title dynamically.
+                </p>
+              </div>
+
+              {/* App Logo */}
+              <div className="rounded-2xl bg-slate-50 p-4 border border-slate-200/80 space-y-3">
+                <div className="flex items-center justify-between">
+                  <label className="block text-xs font-bold text-slate-800">
+                    Application Logo URL
+                  </label>
+                  <span className="text-[11px] text-slate-400">Live Preview on Right</span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <input
+                    type="text"
+                    value={logoUrl}
+                    onChange={(e) => setLogoUrl(e.target.value)}
+                    placeholder="https://... (or leave blank to use default emblem)"
+                    className="flex-1 h-11 rounded-xl border border-slate-200 bg-white px-3.5 text-xs font-medium text-slate-900 outline-none focus:border-[#117B78]"
+                  />
+                  <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-white border border-slate-200 shadow-xs overflow-hidden shrink-0">
+                    {logoUrl ? (
+                      <img src={logoUrl} alt="Logo Preview" className="h-full w-full object-contain p-1" />
+                    ) : (
+                      <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-[#117B78] to-[#0D9C88] text-white flex items-center justify-center font-black text-sm">
+                        {appName.charAt(0) || 'K'}
+                      </div>
+                    )}
+                  </div>
+                </div>
+                {/* Logo Presets */}
+                <div className="flex flex-wrap items-center gap-2 pt-1">
+                  <span className="text-[10px] font-bold text-slate-500 uppercase">Presets:</span>
+                  {[
+                    { label: 'Default Emblem', url: '' },
+                    { label: 'Islamic Crest', url: 'https://images.unsplash.com/photo-1542838132-92c53300491e?w=100&auto=format&fit=crop&q=80' },
+                    { label: 'Golden Calligraphy', url: 'https://images.unsplash.com/photo-1584551246679-0daf3d275d0f?w=100&auto=format&fit=crop&q=80' },
+                  ].map((p) => (
+                    <button
+                      key={p.label}
+                      type="button"
+                      onClick={() => setLogoUrl(p.url)}
+                      className="px-2.5 py-1 rounded-lg border border-slate-200 bg-white text-[10px] font-bold text-slate-600 hover:border-[#117B78] hover:text-[#117B78] transition cursor-pointer"
+                    >
+                      {p.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Favicon Icon */}
+              <div className="rounded-2xl bg-slate-50 p-4 border border-slate-200/80 space-y-3">
+                <div className="flex items-center justify-between">
+                  <label className="block text-xs font-bold text-slate-800">
+                    Favicon Icon URL
+                  </label>
+                  <span className="text-[11px] text-slate-400">Browser Tab Icon</span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <input
+                    type="text"
+                    value={faviconUrl}
+                    onChange={(e) => setFaviconUrl(e.target.value)}
+                    placeholder="https://... favicon .ico, .png, or .svg"
+                    className="flex-1 h-11 rounded-xl border border-slate-200 bg-white px-3.5 text-xs font-medium text-slate-900 outline-none focus:border-[#117B78]"
+                  />
+                  <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-white border border-slate-200 shadow-xs overflow-hidden shrink-0">
+                    {faviconUrl ? (
+                      <img src={faviconUrl} alt="Favicon Preview" className="h-6 w-6 object-contain" />
+                    ) : (
+                      <div className="h-6 w-6 rounded bg-[#117B78] text-white flex items-center justify-center font-bold text-[10px]">
+                        K
+                      </div>
+                    )}
+                  </div>
+                </div>
+                {/* Favicon Presets */}
+                <div className="flex flex-wrap items-center gap-2 pt-1">
+                  <span className="text-[10px] font-bold text-slate-500 uppercase">Presets:</span>
+                  {[
+                    { label: 'Emerald Badge', url: 'https://api.iconify.design/lucide:shield-check.svg?color=%23117B78' },
+                    { label: 'Academic Cap', url: 'https://api.iconify.design/lucide:graduation-cap.svg?color=%23117B78' },
+                    { label: 'Islamic Star', url: 'https://api.iconify.design/lucide:sparkles.svg?color=%23117B78' },
+                  ].map((p) => (
+                    <button
+                      key={p.label}
+                      type="button"
+                      onClick={() => setFaviconUrl(p.url)}
+                      className="px-2.5 py-1 rounded-lg border border-slate-200 bg-white text-[10px] font-bold text-slate-600 hover:border-[#117B78] hover:text-[#117B78] transition cursor-pointer"
+                    >
+                      {p.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Institution Metadata */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Official Institution Name
+                  </label>
+                  <input
+                    type="text"
+                    value={institutionName}
+                    onChange={(e) => setInstitutionName(e.target.value)}
+                    className="w-full h-11 rounded-xl border border-slate-200 px-3.5 text-xs font-medium text-slate-900 outline-none focus:border-[#117B78]"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Institution Tagline
+                  </label>
+                  <input
+                    type="text"
+                    value={tagline}
+                    onChange={(e) => setTagline(e.target.value)}
+                    className="w-full h-11 rounded-xl border border-slate-200 px-3.5 text-xs font-medium text-slate-900 outline-none focus:border-[#117B78]"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Contact Email
+                  </label>
+                  <input
+                    type="email"
+                    value={contactEmail}
+                    onChange={(e) => setContactEmail(e.target.value)}
+                    className="w-full h-11 rounded-xl border border-slate-200 px-3.5 text-xs font-medium text-slate-900 outline-none focus:border-[#117B78]"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Contact Phone
+                  </label>
+                  <input
+                    type="text"
+                    value={contactPhone}
+                    onChange={(e) => setContactPhone(e.target.value)}
+                    className="w-full h-11 rounded-xl border border-slate-200 px-3.5 text-xs font-medium text-slate-900 outline-none focus:border-[#117B78]"
+                  />
+                </div>
               </div>
 
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Contact Email
+                  Campus Address
                 </label>
                 <input
-                  type="email"
-                  value={contactEmail}
-                  onChange={(e) => setContactEmail(e.target.value)}
+                  type="text"
+                  value={address}
+                  onChange={(e) => setAddress(e.target.value)}
                   className="w-full h-11 rounded-xl border border-slate-200 px-3.5 text-xs font-medium text-slate-900 outline-none focus:border-[#117B78]"
                 />
               </div>
-            </div>
 
-            <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">
-                Active Academic Session / Year
-              </label>
-              <input
-                type="text"
-                value={academicYear}
-                onChange={(e) => setAcademicYear(e.target.value)}
-                className="w-full h-11 rounded-xl border border-slate-200 px-3.5 text-xs font-medium text-slate-900 outline-none focus:border-[#117B78]"
-              />
-            </div>
-
-            <div className="pt-2">
-              <button
-                type="submit"
-                className="flex items-center gap-2 rounded-xl bg-[#117B78] px-5 py-2.5 text-xs font-bold text-white shadow-sm hover:bg-[#0D9C88] transition cursor-pointer"
-              >
-                <Save className="w-4 h-4" />
-                <span>Save Configuration</span>
-              </button>
-            </div>
-          </form>
+              <div className="pt-2">
+                <button
+                  type="submit"
+                  className="flex items-center gap-2 rounded-xl bg-[#117B78] px-6 py-3 text-xs font-bold text-white shadow-sm hover:bg-[#0D9C88] transition cursor-pointer"
+                >
+                  <Save className="w-4 h-4" />
+                  <span>Save Branding & Settings</span>
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
 

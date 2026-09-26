@@ -12,6 +12,9 @@ import {
   FileText,
   AlertCircle,
   Link2,
+  Edit2,
+  Trash2,
+  AlertTriangle,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { ClassSession } from '../types';
@@ -23,6 +26,8 @@ export const ClassesView: React.FC = () => {
     subjects,
     users,
     addClassSession,
+    updateClassSession,
+    deleteClassSession,
     startClassSession,
     endClassSession,
     currentUser,
@@ -34,6 +39,8 @@ export const ClassesView: React.FC = () => {
   const [dateFilter, setDateFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
   const [showScheduleModal, setShowScheduleModal] = useState(false);
+  const [editingSession, setEditingSession] = useState<ClassSession | null>(null);
+  const [sessionToDelete, setSessionToDelete] = useState<ClassSession | null>(null);
   const [selectedClassForNotes, setSelectedClassForNotes] = useState<ClassSession | null>(null);
 
   // Schedule Class Form
@@ -46,9 +53,65 @@ export const ClassesView: React.FC = () => {
   const [formMeetUrl, setFormMeetUrl] = useState('https://meet.google.com/abc-educ-ore');
   const [formNotes, setFormNotes] = useState('');
 
+  // Edit Schedule Form
+  const [editCourseId, setEditCourseId] = useState('');
+  const [editSubjectId, setEditSubjectId] = useState('');
+  const [editFacultyId, setEditFacultyId] = useState('');
+  const [editDate, setEditDate] = useState('');
+  const [editStartTime, setEditStartTime] = useState('');
+  const [editEndTime, setEditEndTime] = useState('');
+  const [editMeetUrl, setEditMeetUrl] = useState('');
+  const [editStatus, setEditStatus] = useState<ClassSession['status']>('scheduled');
+  const [editNotes, setEditNotes] = useState('');
+
   const isFaculty = activeRole === 'faculty';
   const isStudent = activeRole === 'student';
   const canSchedule = can('courses.edit') || currentUser?.role === 'super_admin' || isFaculty;
+
+  const handleOpenEdit = (session: ClassSession) => {
+    setEditingSession(session);
+    setEditCourseId(session.courseId);
+    setEditSubjectId(session.subjectId);
+    setEditFacultyId(session.facultyId);
+    setEditDate(session.date);
+    setEditStartTime(session.startTime);
+    setEditEndTime(session.endTime);
+    setEditMeetUrl(session.meetUrl);
+    setEditStatus(session.status);
+    setEditNotes(session.notes || '');
+  };
+
+  const handleSaveEdit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingSession) return;
+
+    const course = courses.find((c) => c.id === editCourseId);
+    const subject = subjects.find((s) => s.id === editSubjectId);
+    const faculty = users.find((u) => u.id === editFacultyId);
+
+    updateClassSession(editingSession.id, {
+      courseId: editCourseId,
+      subjectId: editSubjectId,
+      facultyId: editFacultyId,
+      courseName: course?.name || editingSession.courseName,
+      subjectName: subject?.name || editingSession.subjectName,
+      facultyName: faculty?.name || editingSession.facultyName,
+      date: editDate,
+      startTime: editStartTime,
+      endTime: editEndTime,
+      meetUrl: editMeetUrl,
+      status: editStatus,
+      notes: editNotes,
+    });
+
+    setEditingSession(null);
+  };
+
+  const handleConfirmDelete = () => {
+    if (!sessionToDelete) return;
+    deleteClassSession(sessionToDelete.id);
+    setSessionToDelete(null);
+  };
 
   const filteredClasses = classes.filter((c) => {
     const matchesStatus = statusFilter === 'all' || c.status === statusFilter;
@@ -267,6 +330,25 @@ export const ClassesView: React.FC = () => {
                         <ClipboardCheck className="w-4 h-4 text-emerald-600" />
                         <span>Take Attendance</span>
                       </button>
+
+                      {canSchedule && (
+                        <>
+                          <button
+                            onClick={() => handleOpenEdit(session)}
+                            className="p-2.5 rounded-xl border border-slate-200 bg-white text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition cursor-pointer"
+                            title="Edit Class Schedule"
+                          >
+                            <Edit2 className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => setSessionToDelete(session)}
+                            className="p-2.5 rounded-xl border border-slate-200 bg-white text-slate-400 hover:bg-rose-50 hover:text-rose-600 transition cursor-pointer"
+                            title="Delete Class Schedule"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </>
+                      )}
                     </>
                   )}
                 </div>
@@ -423,6 +505,197 @@ export const ClassesView: React.FC = () => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Schedule Modal */}
+      {editingSession && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 animate-in fade-in">
+          <div className="w-full max-w-lg rounded-3xl bg-white p-6 shadow-2xl border border-slate-100 max-h-[90vh] overflow-y-auto space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <h3 className="text-base font-bold text-slate-900">Edit Class Session</h3>
+              <button
+                onClick={() => setEditingSession(null)}
+                className="text-slate-400 hover:text-slate-600 font-bold"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEdit} className="space-y-3.5">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Select Program</label>
+                  <select
+                    value={editCourseId}
+                    onChange={(e) => {
+                      setEditCourseId(e.target.value);
+                      const firstSubj = subjects.find((s) => s.courseId === e.target.value);
+                      if (firstSubj) setEditSubjectId(firstSubj.id);
+                    }}
+                    className="w-full h-10 rounded-xl border border-slate-200 px-3 text-xs font-semibold text-slate-700 outline-none focus:border-[#117B78]"
+                  >
+                    {courses.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Subject Module</label>
+                  <select
+                    value={editSubjectId}
+                    onChange={(e) => setEditSubjectId(e.target.value)}
+                    className="w-full h-10 rounded-xl border border-slate-200 px-3 text-xs font-semibold text-slate-700 outline-none focus:border-[#117B78]"
+                  >
+                    {subjects
+                      .filter((s) => !editCourseId || s.courseId === editCourseId)
+                      .map((s) => (
+                        <option key={s.id} value={s.id}>
+                          {s.name} ({s.code})
+                        </option>
+                      ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Assigned Faculty</label>
+                  <select
+                    value={editFacultyId}
+                    onChange={(e) => setEditFacultyId(e.target.value)}
+                    className="w-full h-10 rounded-xl border border-slate-200 px-3 text-xs font-semibold text-slate-700 outline-none focus:border-[#117B78]"
+                  >
+                    {users
+                      .filter((u) => u.role === 'faculty')
+                      .map((f) => (
+                        <option key={f.id} value={f.id}>
+                          {f.name}
+                        </option>
+                      ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Session Status</label>
+                  <select
+                    value={editStatus}
+                    onChange={(e) => setEditStatus(e.target.value as any)}
+                    className="w-full h-10 rounded-xl border border-slate-200 px-3 text-xs font-semibold text-slate-700 outline-none focus:border-[#117B78]"
+                  >
+                    <option value="scheduled">Scheduled</option>
+                    <option value="live">Live in Session</option>
+                    <option value="completed">Completed</option>
+                    <option value="cancelled">Cancelled</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Class Date</label>
+                  <input
+                    type="date"
+                    required
+                    value={editDate}
+                    onChange={(e) => setEditDate(e.target.value)}
+                    className="w-full h-10 rounded-xl border border-slate-200 px-3 text-xs font-medium text-slate-900 outline-none focus:border-[#117B78]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Start Time</label>
+                  <input
+                    type="text"
+                    required
+                    value={editStartTime}
+                    onChange={(e) => setEditStartTime(e.target.value)}
+                    className="w-full h-10 rounded-xl border border-slate-200 px-3 text-xs font-medium text-slate-900 outline-none focus:border-[#117B78]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">End Time</label>
+                  <input
+                    type="text"
+                    required
+                    value={editEndTime}
+                    onChange={(e) => setEditEndTime(e.target.value)}
+                    className="w-full h-10 rounded-xl border border-slate-200 px-3 text-xs font-medium text-slate-900 outline-none focus:border-[#117B78]"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Google Meet Link</label>
+                <input
+                  type="url"
+                  required
+                  value={editMeetUrl}
+                  onChange={(e) => setEditMeetUrl(e.target.value)}
+                  className="w-full h-10 rounded-xl border border-slate-200 px-3.5 text-xs font-medium text-slate-900 outline-none focus:border-[#117B78]"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Preparation Notes / Agenda</label>
+                <textarea
+                  rows={2}
+                  value={editNotes}
+                  onChange={(e) => setEditNotes(e.target.value)}
+                  className="w-full rounded-xl border border-slate-200 p-3 text-xs font-medium text-slate-900 outline-none focus:border-[#117B78]"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setEditingSession(null)}
+                  className="rounded-xl px-4 py-2 text-xs font-bold text-slate-500 hover:bg-slate-100 cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="rounded-xl bg-[#117B78] px-5 py-2 text-xs font-bold text-white shadow-sm hover:bg-[#0D9C88] cursor-pointer"
+                >
+                  Save Schedule
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Schedule Confirmation Modal */}
+      {sessionToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 animate-in fade-in">
+          <div className="w-full max-w-sm rounded-3xl bg-white p-6 shadow-2xl border border-slate-100 text-center space-y-4">
+            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-rose-100 text-rose-600">
+              <AlertTriangle className="w-6 h-6" />
+            </div>
+            <div>
+              <h3 className="text-base font-bold text-slate-900">Delete Scheduled Class?</h3>
+              <p className="text-xs text-slate-500 mt-1">
+                Are you sure you want to delete session for <span className="font-bold text-slate-800">{sessionToDelete.subjectName}</span> on {sessionToDelete.date}?
+              </p>
+            </div>
+            <div className="flex items-center justify-center gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setSessionToDelete(null)}
+                className="flex-1 rounded-xl border border-slate-200 py-2.5 text-xs font-bold text-slate-600 hover:bg-slate-50 cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDelete}
+                className="flex-1 rounded-xl bg-rose-600 py-2.5 text-xs font-bold text-white shadow-sm hover:bg-rose-700 cursor-pointer"
+              >
+                Yes, Delete
+              </button>
+            </div>
           </div>
         </div>
       )}

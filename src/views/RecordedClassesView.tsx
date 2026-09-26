@@ -11,6 +11,8 @@ import {
   BookOpen,
   Sparkles,
   X,
+  Edit2,
+  AlertTriangle,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { RecordedClass } from '../types';
@@ -22,6 +24,7 @@ export const RecordedClassesView: React.FC = () => {
     subjects,
     users,
     addRecordedClass,
+    updateRecordedClass,
     deleteRecordedClass,
     can,
     currentUser,
@@ -32,6 +35,8 @@ export const RecordedClassesView: React.FC = () => {
   const [courseFilter, setCourseFilter] = useState('all');
   const [showAddModal, setShowAddModal] = useState(false);
   const [activeVideoModal, setActiveVideoModal] = useState<RecordedClass | null>(null);
+  const [editingRecording, setEditingRecording] = useState<RecordedClass | null>(null);
+  const [recordingToDelete, setRecordingToDelete] = useState<RecordedClass | null>(null);
 
   // Form state
   const [formTitle, setFormTitle] = useState('');
@@ -42,7 +47,55 @@ export const RecordedClassesView: React.FC = () => {
   const [formDuration, setFormDuration] = useState('1 hr 15 min');
   const [formClassDate, setFormClassDate] = useState(new Date().toISOString().split('T')[0]);
 
+  // Edit state
+  const [editTitle, setEditTitle] = useState('');
+  const [editDescription, setEditDescription] = useState('');
+  const [editCourseId, setEditCourseId] = useState('');
+  const [editSubjectId, setEditSubjectId] = useState('');
+  const [editDriveUrl, setEditDriveUrl] = useState('');
+  const [editDuration, setEditDuration] = useState('');
+  const [editClassDate, setEditClassDate] = useState('');
+
   const canManage = can('courses.edit') || currentUser?.role === 'super_admin' || activeRole === 'faculty';
+
+  const handleOpenEdit = (rec: RecordedClass) => {
+    setEditingRecording(rec);
+    setEditTitle(rec.title);
+    setEditDescription(rec.description);
+    setEditCourseId(rec.courseId);
+    setEditSubjectId(rec.subjectId);
+    setEditDriveUrl(rec.driveUrl);
+    setEditDuration(rec.duration);
+    setEditClassDate(rec.classDate);
+  };
+
+  const handleSaveEdit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingRecording) return;
+
+    const course = courses.find((c) => c.id === editCourseId);
+    const subject = subjects.find((s) => s.id === editSubjectId);
+
+    updateRecordedClass(editingRecording.id, {
+      title: editTitle,
+      description: editDescription,
+      courseId: editCourseId,
+      subjectId: editSubjectId,
+      courseName: course?.name || editingRecording.courseName,
+      subjectName: subject?.name || editingRecording.subjectName,
+      driveUrl: editDriveUrl,
+      duration: editDuration,
+      classDate: editClassDate,
+    });
+
+    setEditingRecording(null);
+  };
+
+  const handleConfirmDelete = () => {
+    if (!recordingToDelete) return;
+    deleteRecordedClass(recordingToDelete.id);
+    setRecordingToDelete(null);
+  };
 
   const filteredRecordings = recordedClasses.filter((r) => {
     const matchesSearch =
@@ -152,15 +205,28 @@ export const RecordedClassesView: React.FC = () => {
                       {rec.duration}
                     </span>
                     {canManage && (
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          deleteRecordedClass(rec.id);
-                        }}
-                        className="h-7 w-7 rounded-lg bg-black/50 text-white/80 hover:text-rose-400 flex items-center justify-center transition"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
+                      <div className="flex items-center gap-1">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleOpenEdit(rec);
+                          }}
+                          className="h-7 w-7 rounded-lg bg-black/60 text-white hover:text-[#117B78] hover:bg-white flex items-center justify-center transition cursor-pointer"
+                          title="Edit Recording"
+                        >
+                          <Edit2 className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setRecordingToDelete(rec);
+                          }}
+                          className="h-7 w-7 rounded-lg bg-black/60 text-white hover:text-rose-400 hover:bg-white flex items-center justify-center transition cursor-pointer"
+                          title="Delete Recording"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                     )}
                   </div>
 
@@ -386,6 +452,166 @@ export const RecordedClassesView: React.FC = () => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Recording Modal */}
+      {editingRecording && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 animate-in fade-in">
+          <div className="w-full max-w-lg rounded-3xl bg-white p-6 shadow-2xl border border-slate-100 max-h-[90vh] overflow-y-auto space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <h3 className="text-base font-bold text-slate-900">Edit Lecture Recording</h3>
+              <button
+                onClick={() => setEditingRecording(null)}
+                className="text-slate-400 hover:text-slate-600 font-bold"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEdit} className="space-y-3.5">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Lecture Title</label>
+                <input
+                  type="text"
+                  required
+                  value={editTitle}
+                  onChange={(e) => setEditTitle(e.target.value)}
+                  className="w-full h-10 rounded-xl border border-slate-200 px-3.5 text-xs font-medium text-slate-900 outline-none focus:border-[#117B78]"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Program</label>
+                  <select
+                    value={editCourseId}
+                    onChange={(e) => {
+                      setEditCourseId(e.target.value);
+                      const firstSubj = subjects.find((s) => s.courseId === e.target.value);
+                      if (firstSubj) setEditSubjectId(firstSubj.id);
+                    }}
+                    className="w-full h-10 rounded-xl border border-slate-200 px-3 text-xs font-semibold text-slate-700 outline-none focus:border-[#117B78]"
+                  >
+                    {courses.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Subject</label>
+                  <select
+                    value={editSubjectId}
+                    onChange={(e) => setEditSubjectId(e.target.value)}
+                    className="w-full h-10 rounded-xl border border-slate-200 px-3 text-xs font-semibold text-slate-700 outline-none focus:border-[#117B78]"
+                  >
+                    {subjects
+                      .filter((s) => !editCourseId || s.courseId === editCourseId)
+                      .map((s) => (
+                        <option key={s.id} value={s.id}>
+                          {s.name}
+                        </option>
+                      ))}
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Google Drive Link</label>
+                <input
+                  type="url"
+                  required
+                  value={editDriveUrl}
+                  onChange={(e) => setEditDriveUrl(e.target.value)}
+                  className="w-full h-10 rounded-xl border border-slate-200 px-3.5 text-xs font-medium text-slate-900 outline-none focus:border-[#117B78]"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Date</label>
+                  <input
+                    type="date"
+                    required
+                    value={editClassDate}
+                    onChange={(e) => setEditClassDate(e.target.value)}
+                    className="w-full h-10 rounded-xl border border-slate-200 px-3 text-xs font-medium text-slate-900 outline-none focus:border-[#117B78]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Duration</label>
+                  <input
+                    type="text"
+                    required
+                    value={editDuration}
+                    onChange={(e) => setEditDuration(e.target.value)}
+                    className="w-full h-10 rounded-xl border border-slate-200 px-3.5 text-xs font-medium text-slate-900 outline-none focus:border-[#117B78]"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Description</label>
+                <textarea
+                  rows={2}
+                  value={editDescription}
+                  onChange={(e) => setEditDescription(e.target.value)}
+                  className="w-full rounded-xl border border-slate-200 p-3 text-xs font-medium text-slate-900 outline-none focus:border-[#117B78]"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setEditingRecording(null)}
+                  className="rounded-xl px-4 py-2 text-xs font-bold text-slate-500 hover:bg-slate-100 cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="rounded-xl bg-[#117B78] px-5 py-2 text-xs font-bold text-white shadow-sm hover:bg-[#0D9C88] cursor-pointer"
+                >
+                  Save Recording
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Recording Confirmation Modal */}
+      {recordingToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 animate-in fade-in">
+          <div className="w-full max-w-sm rounded-3xl bg-white p-6 shadow-2xl border border-slate-100 text-center space-y-4">
+            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-rose-100 text-rose-600">
+              <AlertTriangle className="w-6 h-6" />
+            </div>
+            <div>
+              <h3 className="text-base font-bold text-slate-900">Delete Lecture Recording?</h3>
+              <p className="text-xs text-slate-500 mt-1">
+                Are you sure you want to delete <span className="font-bold text-slate-800">{recordingToDelete.title}</span>? Students will no longer be able to watch this replay.
+              </p>
+            </div>
+            <div className="flex items-center justify-center gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setRecordingToDelete(null)}
+                className="flex-1 rounded-xl border border-slate-200 py-2.5 text-xs font-bold text-slate-600 hover:bg-slate-50 cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDelete}
+                className="flex-1 rounded-xl bg-rose-600 py-2.5 text-xs font-bold text-white shadow-sm hover:bg-rose-700 cursor-pointer"
+              >
+                Yes, Delete
+              </button>
+            </div>
           </div>
         </div>
       )}

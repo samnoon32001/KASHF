@@ -25,6 +25,8 @@ export type MediaCategory =
 export interface UserProfile {
   id: string;
   name: string;
+  username?: string;
+  password?: string;
   email: string;
   role: UserRole;
   department?: string;
@@ -124,13 +126,16 @@ export interface AttendanceSession {
   courseId: string;
   subjectId: string;
   facultyId: string;
+  courseName?: string;
+  subjectName?: string;
+  facultyName?: string;
   date: string;
   records: AttendanceRecord[];
   totalStudents: number;
   presentCount: number;
   absentCount: number;
   lateCount: number;
-  excusedCount: number;
+  excusedCount?: number;
 }
 
 export interface Task {
@@ -286,7 +291,7 @@ export interface Notification {
   userId: string; // specific user ID or 'all' or role string
   title: string;
   message: string;
-  type: 'class' | 'task' | 'attendance' | 'creative' | 'lead' | 'system';
+  type: 'class' | 'task' | 'attendance' | 'creative' | 'lead' | 'system' | 'warning' | 'info' | 'success' | 'error';
   read: boolean;
   createdAt: string;
   link?: string;
@@ -305,9 +310,11 @@ export interface AuditLog {
 }
 
 export interface InstitutionSettings {
+  appName?: string;
   institutionName: string;
   tagline: string;
   logoUrl: string;
+  faviconUrl?: string;
   primaryColor: string;
   secondaryColor: string;
   contactEmail: string;

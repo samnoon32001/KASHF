@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { AppProvider, useApp } from './context/AppContext';
 import { Header } from './components/Header';
 import { Sidebar } from './components/Sidebar';
@@ -17,6 +17,7 @@ import { CreativeTasksView } from './views/CreativeTasksView';
 import { MediaLibraryView } from './views/MediaLibraryView';
 import { LeadsCRMView } from './views/LeadsCRMView';
 import { SettingsView } from './views/SettingsView';
+import { NotificationsView } from './views/NotificationsView';
 
 import {
   GraduationCap,
@@ -26,7 +27,12 @@ import {
   WifiOff,
   UserCheck,
   KeyRound,
-  ArrowRight,
+  Eye,
+  EyeOff,
+  Lock,
+  User,
+  AlertCircle,
+  CheckCircle2,
 } from 'lucide-react';
 import { RoleType } from './types';
 
@@ -34,114 +40,178 @@ const MainLayout: React.FC = () => {
   const {
     currentUser,
     activeTab,
-    loginWithGoogle,
-    switchRole,
+    loginWithCredentials,
+    settings,
     isOffline,
   } = useApp();
 
-  const [emailInput, setEmailInput] = useState('');
-  const [passwordInput, setPasswordInput] = useState('');
+  // Login form state
+  const [identifier, setIdentifier] = useState(() => {
+    return localStorage.getItem('kashf_saved_username') || '';
+  });
+  const [password, setPassword] = useState(() => {
+    return localStorage.getItem('kashf_saved_password') || '';
+  });
+  const [rememberMe, setRememberMe] = useState(() => {
+    return localStorage.getItem('kashf_remember_me') === 'true';
+  });
+  const [showPassword, setShowPassword] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
   const [authError, setAuthError] = useState('');
 
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
+  const handleSignIn = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!identifier.trim() || !password) {
+      setAuthError('Please enter both username/email and password.');
+      return;
+    }
+
+    setIsLoading(true);
+    setAuthError('');
+
+    try {
+      const success = await loginWithCredentials(identifier.trim(), password, rememberMe);
+      if (!success) {
+        setAuthError('Invalid credentials. Check your username/email or password.');
+      } else {
+        if (rememberMe) {
+          localStorage.setItem('kashf_saved_username', identifier.trim());
+          localStorage.setItem('kashf_saved_password', password);
+          localStorage.setItem('kashf_remember_me', 'true');
+        } else {
+          localStorage.removeItem('kashf_saved_username');
+          localStorage.removeItem('kashf_saved_password');
+          localStorage.setItem('kashf_remember_me', 'false');
+        }
+      }
+    } catch (err: any) {
+      setAuthError(err?.message || 'Authentication failed. Please verify credentials.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   // Login view if not logged in
   if (!currentUser) {
+    const appDisplayName = settings.appName || settings.institutionName || 'Kashf Institute of Islamic Excellence';
+
     return (
       <div className="min-h-screen bg-[#F8FAFA] flex flex-col justify-center py-12 sm:px-6 lg:px-8">
         <div className="sm:mx-auto sm:w-full sm:max-w-md">
           {/* Logo & Branding */}
           <div className="flex items-center justify-center gap-3.5">
-            <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-[#117B78] to-[#0D9C88] text-white shadow-xl font-black text-2xl tracking-wider">
-              K
-            </div>
+            {settings.logoUrl ? (
+              <img
+                src={settings.logoUrl}
+                alt="App Logo"
+                className="h-14 w-14 object-contain rounded-2xl bg-white p-1 shadow-md border border-slate-200"
+              />
+            ) : (
+              <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-[#117B78] to-[#0D9C88] text-white shadow-xl font-black text-2xl tracking-wider">
+                {appDisplayName.charAt(0) || 'K'}
+              </div>
+            )}
             <div>
-              <h1 className="text-2xl tracking-tight text-slate-900 leading-tight">
-                <strong className="font-extrabold text-slate-950">Kashf</strong>
+              <h1 className="text-xl font-extrabold tracking-tight text-slate-900 leading-tight">
+                {appDisplayName}
               </h1>
-              <p className="text-xs font-semibold text-slate-600">
-                Institute of Islamic Excellence
+              <p className="text-xs font-semibold text-slate-500">
+                {settings.tagline || 'Institutional Excellence Portal'}
               </p>
             </div>
           </div>
 
           <h2 className="mt-6 text-center text-xl font-bold tracking-tight text-slate-900">
-            Sign in to your Institutional Account
+            Sign in to your Account
           </h2>
           <p className="mt-1 text-center text-xs text-slate-500">
-            Secure Role-Based Access for Students, Faculty, Administration & Marketing
+            Role-based access for Super Admin, Faculty, Coordinators, and Students
           </p>
         </div>
 
-        <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md px-4 sm:px-0">
-          <div className="bg-white py-8 px-6 shadow-xl shadow-slate-200/50 rounded-3xl sm:px-10 border border-slate-100">
-            {/* Google Sign In Button */}
-            <button
-              onClick={() => loginWithGoogle()}
-              className="w-full flex items-center justify-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-xs font-bold text-slate-700 shadow-xs hover:bg-slate-50 transition cursor-pointer"
-            >
-              <svg className="h-4 w-4" viewBox="0 0 24 24">
-                <path
-                  fill="#EA4335"
-                  d="M12 5c1.6 0 3 .6 4.1 1.6l3.1-3.1C17.3 1.7 14.8 1 12 1 7.4 1 3.5 3.6 1.6 7.4l3.7 2.9C6.2 7.3 8.9 5 12 5z"
-                />
-                <path
-                  fill="#4285F4"
-                  d="M23.5 12.3c0-.8-.1-1.7-.2-2.3H12v4.6h6.5c-.3 1.5-1.1 2.8-2.4 3.7l3.7 2.9c2.2-2 3.7-5 3.7-8.9z"
-                />
-                <path
-                  fill="#FBBC05"
-                  d="M5.3 14.7c-.2-.7-.4-1.5-.4-2.3 0-.9.2-1.7.4-2.4L1.6 7.1C.6 9.1 0 11.4 0 14s.6 4.9 1.6 6.9l3.7-2.9c0-.4-.2-.9-.2-1.3z"
-                />
-                <path
-                  fill="#34A853"
-                  d="M12 23c3.2 0 6-1.1 8-3l-3.7-2.9c-1.1.7-2.5 1.2-4.3 1.2-3.1 0-5.8-2.3-6.7-5.3L1.6 15.9C3.5 19.7 7.4 23 12 23z"
-                />
-              </svg>
-              <span>Continue with Google (Firebase Auth)</span>
-            </button>
-
-            <div className="relative my-6">
-              <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-slate-200" />
+        <div className="mt-7 sm:mx-auto sm:w-full sm:max-w-md px-4 sm:px-0">
+          <div className="bg-white py-8 px-6 shadow-xl shadow-slate-200/50 rounded-3xl sm:px-10 border border-slate-100 space-y-6">
+            {authError && (
+              <div className="rounded-2xl bg-rose-50 border border-rose-200 p-3.5 text-xs text-rose-800 flex items-start gap-2.5 animate-in fade-in">
+                <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                <span className="font-semibold">{authError}</span>
               </div>
-              <div className="relative flex justify-center text-xs uppercase">
-                <span className="bg-white px-2 text-slate-400 font-semibold">
-                  Or instant demo role sign-in
-                </span>
+            )}
+
+            {/* REAL USERNAME & PASSWORD FORM */}
+            <form onSubmit={handleSignIn} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                  Username or Email Address
+                </label>
+                <div className="relative">
+                  <User className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                  <input
+                    type="text"
+                    required
+                    value={identifier}
+                    onChange={(e) => setIdentifier(e.target.value)}
+                    placeholder="e.g. admin or sarah_jenkins or student@kashf.edu"
+                    className="w-full h-11 rounded-xl border border-slate-200 bg-white pl-10 pr-4 text-xs font-medium text-slate-900 outline-none focus:border-[#117B78] focus:ring-2 focus:ring-[#117B78]/15 transition"
+                  />
+                </div>
               </div>
-            </div>
 
-            {/* Demo Quick Sign-in Grid */}
-            <div className="space-y-2">
-              {[
-                { role: 'super_admin' as RoleType, label: 'Super Admin', desc: 'Root institution control' },
-                { role: 'faculty' as RoleType, label: 'Faculty / Professor', desc: 'Classes, attendance, grading' },
-                { role: 'student' as RoleType, label: 'Enrolled Student', desc: 'Lectures, assignments, rewards' },
-                { role: 'telecaller' as RoleType, label: 'Telecaller / CRM', desc: 'Meta lead ads & calls' },
-                { role: 'creative_head' as RoleType, label: 'Creative Head', desc: 'Media & campaign workflow' },
-              ].map((item) => (
-                <button
-                  key={item.role}
-                  onClick={() => switchRole(item.role)}
-                  className="w-full flex items-center justify-between p-3 rounded-2xl border border-slate-200 hover:border-[#117B78] hover:bg-[#117B78]/5 transition text-left cursor-pointer group"
-                >
-                  <div>
-                    <p className="text-xs font-bold text-slate-900 group-hover:text-[#117B78]">
-                      Sign in as {item.label}
-                    </p>
-                    <p className="text-[11px] text-slate-400">{item.desc}</p>
-                  </div>
-                  <ArrowRight className="w-4 h-4 text-slate-400 group-hover:text-[#117B78] transition" />
-                </button>
-              ))}
-            </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                  Password
+                </label>
+                <div className="relative">
+                  <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    required
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="••••••••••••"
+                    className="w-full h-11 rounded-xl border border-slate-200 bg-white pl-10 pr-10 text-xs font-medium text-slate-900 outline-none focus:border-[#117B78] focus:ring-2 focus:ring-[#117B78]/15 transition"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition"
+                  >
+                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
 
-            <div className="mt-6 pt-4 border-t border-slate-100 text-center">
-              <p className="text-[11px] text-slate-400">
-                Encrypted with Firebase Auth & Cloud Firestore RBAC Security Rules
-              </p>
-            </div>
+              <div className="flex items-center justify-between pt-1">
+                <label className="flex items-center gap-2 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={rememberMe}
+                    onChange={(e) => setRememberMe(e.target.checked)}
+                    className="h-4 w-4 rounded border-slate-300 accent-[#117B78] focus:ring-[#117B78]"
+                  />
+                  <span className="text-xs font-semibold text-slate-600">
+                    Save Password / Remember Me
+                  </span>
+                </label>
+              </div>
+
+              <button
+                type="submit"
+                disabled={isLoading}
+                className="w-full h-11 flex items-center justify-center gap-2 rounded-xl bg-[#117B78] px-4 text-xs font-bold text-white shadow-sm hover:bg-[#0D9C88] transition cursor-pointer disabled:opacity-50"
+              >
+                {isLoading ? (
+                  <span>Signing In...</span>
+                ) : (
+                  <>
+                    <LogIn className="w-4 h-4" />
+                    <span>Sign In to Dashboard</span>
+                  </>
+                )}
+              </button>
+            </form>
           </div>
         </div>
       </div>
@@ -154,7 +224,8 @@ const MainLayout: React.FC = () => {
       case 'dashboard':
         return <DashboardView />;
       case 'users':
-        return <UsersView />;
+      case 'students':
+        return <UsersView initialFilter={activeTab === 'students' ? 'student' : 'all'} />;
       case 'courses':
         return <CoursesView />;
       case 'classes':
@@ -164,6 +235,7 @@ const MainLayout: React.FC = () => {
       case 'attendance':
         return <AttendanceView />;
       case 'tasks':
+      case 'points':
         return <TasksView />;
       case 'creative':
         return <CreativeTasksView />;
@@ -171,6 +243,12 @@ const MainLayout: React.FC = () => {
         return <MediaLibraryView />;
       case 'leads':
         return <LeadsCRMView />;
+      case 'notifications':
+        return <NotificationsView />;
+      case 'roles':
+        return <SettingsView initialTab="roles" />;
+      case 'reports':
+        return <AttendanceView />;
       case 'settings':
         return <SettingsView />;
       default:
