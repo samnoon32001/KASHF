@@ -23,12 +23,18 @@ import {
 import { useApp } from '../context/AppContext';
 
 interface SidebarProps {
-  isOpen: boolean;
-  onClose: () => void;
+  isOpen?: boolean;
+  onClose?: () => void;
 }
 
-export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
+export const Sidebar: React.FC<SidebarProps> = ({ isOpen = false, onClose }) => {
   const { activeTab, setActiveTab, can, currentUser, settings, unreadNotificationCount } = useApp();
+
+  const handleClose = () => {
+    if (typeof onClose === 'function') {
+      onClose();
+    }
+  };
 
   const isSuperAdmin = currentUser?.role === 'super_admin';
   const isStudent = currentUser?.role === 'student';
@@ -189,7 +195,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
       {isOpen && (
         <div
           id="sidebar-backdrop"
-          onClick={onClose}
+          onClick={handleClose}
           className="fixed inset-0 z-40 bg-slate-900/50 backdrop-blur-xs lg:hidden transition-opacity"
         />
       )}
@@ -219,7 +225,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
 
           <button
             id="sidebar-close-btn"
-            onClick={onClose}
+            onClick={handleClose}
             className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 lg:hidden cursor-pointer"
           >
             <X className="w-5 h-5" />
@@ -252,7 +258,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
                       id={`nav-item-${item.id}`}
                       onClick={() => {
                         setActiveTab(item.id);
-                        onClose();
+                        handleClose();
                       }}
                       className={`group flex w-full items-center justify-between rounded-xl px-3 py-2 text-xs font-semibold transition cursor-pointer ${
                         isActive

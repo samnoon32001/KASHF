@@ -13,7 +13,7 @@ import { useApp } from '../context/AppContext';
 import { PWAInstallButton } from './PWAInstallButton';
 import { UserRole } from '../types';
 
-export const Header: React.FC<{ onToggleSidebar: () => void }> = ({ onToggleSidebar }) => {
+export const Header: React.FC<{ onToggleSidebar?: () => void }> = ({ onToggleSidebar }) => {
   const {
     currentUser,
     activeRole,

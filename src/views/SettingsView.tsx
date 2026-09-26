@@ -12,6 +12,10 @@ import {
   Mail,
   Copy,
   Check,
+  Sparkles,
+  ExternalLink,
+  Eye,
+  EyeOff,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { RoleType } from '../types';
@@ -37,6 +41,18 @@ export const SettingsView: React.FC = () => {
     navigator.clipboard.writeText(text);
     setCopiedKey(id);
     setTimeout(() => setCopiedKey(null), 2000);
+  };
+
+  const [geminiApiKey, setGeminiApiKey] = useState(
+    () => localStorage.getItem('kashf_gemini_api_key') || ''
+  );
+  const [showGeminiKey, setShowGeminiKey] = useState(false);
+  const [geminiSaved, setGeminiSaved] = useState(false);
+
+  const handleSaveGeminiKey = () => {
+    localStorage.setItem('kashf_gemini_api_key', geminiApiKey);
+    setGeminiSaved(true);
+    setTimeout(() => setGeminiSaved(false), 2500);
   };
 
   const handleSaveProfile = (e: React.FormEvent) => {
@@ -311,6 +327,95 @@ export const SettingsView: React.FC = () => {
                 value="educore-gsuite-workspace.apps.googleusercontent.com"
                 className="w-full h-10 rounded-xl border border-slate-200 bg-slate-50 px-3 text-xs font-mono text-slate-700"
               />
+            </div>
+          </div>
+
+          {/* Google Gemini AI API Configuration */}
+          <div className="rounded-3xl bg-white border border-slate-200 p-6 shadow-xs space-y-4">
+            <div className="flex items-start justify-between">
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-2xl bg-amber-50 border border-amber-100 flex items-center justify-center text-amber-600">
+                  <Sparkles className="w-5 h-5" />
+                </div>
+                <div>
+                  <h4 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                    Google Gemini AI API
+                    <span className="text-[10px] font-semibold bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded-full border border-indigo-100">
+                      models/gemini-2.5-flash
+                    </span>
+                  </h4>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Powers institutional curriculum generation, student inquiry responses, and automated tasks.
+                  </p>
+                </div>
+              </div>
+              <span
+                className={`rounded-full px-2.5 py-0.5 text-[10px] font-bold ${
+                  geminiApiKey
+                    ? 'bg-emerald-100 text-emerald-800'
+                    : 'bg-amber-100 text-amber-800'
+                }`}
+              >
+                {geminiApiKey ? 'Configured' : 'Key Needed'}
+              </span>
+            </div>
+
+            <div className="rounded-2xl bg-slate-50 p-4 border border-slate-200/70 space-y-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <span className="text-xs font-semibold text-slate-700">
+                  Hostinger & Server API Key
+                </span>
+                <a
+                  href="https://aistudio.google.com/app/apikey"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-600 hover:text-emerald-700 hover:underline"
+                >
+                  <ExternalLink className="w-3.5 h-3.5" />
+                  Get Free API Key from Google AI Studio
+                </a>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <div className="relative flex-1">
+                  <input
+                    type={showGeminiKey ? 'text' : 'password'}
+                    value={geminiApiKey}
+                    onChange={(e) => setGeminiApiKey(e.target.value)}
+                    placeholder="AIzaSy..."
+                    className="w-full h-10 rounded-xl border border-slate-200 bg-white px-3 pr-10 text-xs font-mono text-slate-800 focus:outline-emerald-500"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowGeminiKey(!showGeminiKey)}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
+                  >
+                    {showGeminiKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleSaveGeminiKey}
+                  className="flex items-center gap-1.5 rounded-xl bg-emerald-600 px-4 h-10 text-xs font-bold text-white hover:bg-emerald-700 cursor-pointer shadow-xs"
+                >
+                  {geminiSaved ? <Check className="w-4 h-4" /> : <Save className="w-4 h-4" />}
+                  <span>{geminiSaved ? 'Saved' : 'Save'}</span>
+                </button>
+              </div>
+
+              {/* Hostinger Guide callout */}
+              <div className="rounded-xl bg-white border border-slate-200 p-3 text-xs text-slate-600 space-y-1.5">
+                <p className="font-bold text-slate-800 flex items-center gap-1.5">
+                  <Key className="w-3.5 h-3.5 text-emerald-600" />
+                  How to configure in Hostinger:
+                </p>
+                <ol className="list-decimal list-inside space-y-1 text-slate-500 pl-1 text-[11px]">
+                  <li>Generate your free API key at <strong className="text-slate-700">aistudio.google.com/app/apikey</strong></li>
+                  <li>In Hostinger hPanel, go to <strong className="text-slate-700">Websites → Manage → Environment Variables</strong> (or edit your <strong className="text-slate-700">.env</strong> file)</li>
+                  <li>Add variable name: <code className="bg-slate-100 px-1 py-0.5 rounded text-slate-800 font-mono">GEMINI_API_KEY</code></li>
+                  <li>Paste your key starting with <code className="bg-slate-100 px-1 py-0.5 rounded text-slate-800 font-mono">AIzaSy...</code> and save</li>
+                </ol>
+              </div>
             </div>
           </div>
 

@@ -43,6 +43,8 @@ const MainLayout: React.FC = () => {
   const [passwordInput, setPasswordInput] = useState('');
   const [authError, setAuthError] = useState('');
 
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+
   // Login view if not logged in
   if (!currentUser) {
     return (
@@ -181,13 +183,13 @@ const MainLayout: React.FC = () => {
       {/* Setup / Password change modal for first login */}
       <FirstLoginModal />
 
-      {/* Desktop Sidebar Navigation */}
-      <Sidebar />
+      {/* Desktop & Mobile Sidebar Navigation */}
+      <Sidebar isOpen={isSidebarOpen} onClose={() => setIsSidebarOpen(false)} />
 
       {/* Main Container */}
-      <div className="flex-1 flex flex-col min-w-0 md:pl-64">
+      <div className="flex-1 flex flex-col min-w-0">
         {/* Top Header */}
-        <Header />
+        <Header onToggleSidebar={() => setIsSidebarOpen((prev) => !prev)} />
 
         {/* Offline Banner if connectivity drops */}
         {isOffline && (
