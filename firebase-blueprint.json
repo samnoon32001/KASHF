@@ -1,0 +1,264 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile with role and permission definitions",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "role": { "type": "string" },
+        "department": { "type": "string" },
+        "status": { "type": "string" },
+        "phone": { "type": "string" },
+        "joiningDate": { "type": "string" },
+        "photoUrl": { "type": "string" },
+        "permissions": { "type": "array" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["name", "email", "role", "status"]
+    },
+    "Course": {
+      "title": "Course",
+      "description": "Course offered by the institution",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "code": { "type": "string" },
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "category": { "type": "string" },
+        "duration": { "type": "string" },
+        "status": { "type": "string" },
+        "image": { "type": "string" },
+        "facultyIds": { "type": "array" },
+        "studentIds": { "type": "array" }
+      },
+      "required": ["code", "name", "status"]
+    },
+    "Subject": {
+      "title": "Subject",
+      "description": "Subject within a course",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "code": { "type": "string" },
+        "name": { "type": "string" },
+        "courseId": { "type": "string" },
+        "facultyId": { "type": "string" },
+        "status": { "type": "string" }
+      },
+      "required": ["code", "name", "courseId"]
+    },
+    "ClassSession": {
+      "title": "ClassSession",
+      "description": "Live and scheduled class session",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "courseId": { "type": "string" },
+        "subjectId": { "type": "string" },
+        "facultyId": { "type": "string" },
+        "date": { "type": "string" },
+        "startTime": { "type": "string" },
+        "endTime": { "type": "string" },
+        "meetUrl": { "type": "string" },
+        "status": { "type": "string" },
+        "recordingUrl": { "type": "string" },
+        "attendanceSubmitted": { "type": "boolean" }
+      },
+      "required": ["courseId", "subjectId", "facultyId", "date", "startTime", "endTime"]
+    },
+    "Attendance": {
+      "title": "Attendance",
+      "description": "Attendance log for a class session",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "classId": { "type": "string" },
+        "courseId": { "type": "string" },
+        "subjectId": { "type": "string" },
+        "facultyId": { "type": "string" },
+        "date": { "type": "string" },
+        "records": { "type": "array" }
+      },
+      "required": ["classId", "courseId", "date"]
+    },
+    "Task": {
+      "title": "Task",
+      "description": "Academic assignment or task for students",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "courseId": { "type": "string" },
+        "subjectId": { "type": "string" },
+        "assignedTo": { "type": "array" },
+        "dueDate": { "type": "string" },
+        "points": { "type": "number" },
+        "status": { "type": "string" },
+        "createdBy": { "type": "string" }
+      },
+      "required": ["title", "courseId", "dueDate", "points"]
+    },
+    "TaskSubmission": {
+      "title": "TaskSubmission",
+      "description": "Submission made by a student for a task",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "taskId": { "type": "string" },
+        "studentId": { "type": "string" },
+        "studentName": { "type": "string" },
+        "content": { "type": "string" },
+        "attachmentUrl": { "type": "string" },
+        "status": { "type": "string" },
+        "pointsAwarded": { "type": "number" },
+        "submittedAt": { "type": "string" }
+      },
+      "required": ["taskId", "studentId", "status"]
+    },
+    "CreativeTask": {
+      "title": "CreativeTask",
+      "description": "Marketing and design tasks for Creative Head",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "type": { "type": "string" },
+        "priority": { "type": "string" },
+        "assignedTo": { "type": "string" },
+        "deadline": { "type": "string" },
+        "brief": { "type": "string" },
+        "status": { "type": "string" },
+        "finalFile": { "type": "string" },
+        "comments": { "type": "array" }
+      },
+      "required": ["title", "type", "priority", "status"]
+    },
+    "MediaItem": {
+      "title": "MediaItem",
+      "description": "Media library asset",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "category": { "type": "string" },
+        "url": { "type": "string" },
+        "size": { "type": "string" },
+        "type": { "type": "string" },
+        "uploadedBy": { "type": "string" },
+        "uploadedAt": { "type": "string" }
+      },
+      "required": ["name", "category", "url"]
+    },
+    "Lead": {
+      "title": "Lead",
+      "description": "CRM lead from campaigns and Meta lead ads",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "phone": { "type": "string" },
+        "email": { "type": "string" },
+        "courseInterested": { "type": "string" },
+        "source": { "type": "string" },
+        "campaign": { "type": "string" },
+        "status": { "type": "string" },
+        "assignedTo": { "type": "string" },
+        "followUpDate": { "type": "string" },
+        "paymentStatus": { "type": "string" },
+        "notes": { "type": "array" }
+      },
+      "required": ["name", "phone", "status"]
+    },
+    "Notification": {
+      "title": "Notification",
+      "description": "Notification message for users",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "title": { "type": "string" },
+        "message": { "type": "string" },
+        "type": { "type": "string" },
+        "read": { "type": "boolean" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["title", "message", "type"]
+    },
+    "AuditLog": {
+      "title": "AuditLog",
+      "description": "Audit record for compliance and activity tracking",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "userName": { "type": "string" },
+        "userRole": { "type": "string" },
+        "action": { "type": "string" },
+        "module": { "type": "string" },
+        "details": { "type": "string" },
+        "timestamp": { "type": "string" }
+      },
+      "required": ["action", "module", "timestamp"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/User" },
+      "description": "User profiles and permissions"
+    },
+    "/courses/{courseId}": {
+      "schema": { "$ref": "#/entities/Course" },
+      "description": "Educational courses"
+    },
+    "/subjects/{subjectId}": {
+      "schema": { "$ref": "#/entities/Subject" },
+      "description": "Subjects tied to courses"
+    },
+    "/classes/{classId}": {
+      "schema": { "$ref": "#/entities/ClassSession" },
+      "description": "Live and scheduled class meetings"
+    },
+    "/attendance/{attendanceId}": {
+      "schema": { "$ref": "#/entities/Attendance" },
+      "description": "Attendance rosters and records"
+    },
+    "/tasks/{taskId}": {
+      "schema": { "$ref": "#/entities/Task" },
+      "description": "Assignments and student tasks"
+    },
+    "/taskSubmissions/{submissionId}": {
+      "schema": { "$ref": "#/entities/TaskSubmission" },
+      "description": "Submissions for assigned tasks"
+    },
+    "/creativeTasks/{creativeTaskId}": {
+      "schema": { "$ref": "#/entities/CreativeTask" },
+      "description": "Creative and marketing tasks"
+    },
+    "/media/{mediaId}": {
+      "schema": { "$ref": "#/entities/MediaItem" },
+      "description": "Media library assets"
+    },
+    "/leads/{leadId}": {
+      "schema": { "$ref": "#/entities/Lead" },
+      "description": "CRM leads and inquiries"
+    },
+    "/notifications/{notificationId}": {
+      "schema": { "$ref": "#/entities/Notification" },
+      "description": "User notifications"
+    },
+    "/auditLogs/{logId}": {
+      "schema": { "$ref": "#/entities/AuditLog" },
+      "description": "Institutional activity logs"
+    },
+    "/settings/{settingId}": {
+      "schema": "object",
+      "description": "Institutional configuration"
+    }
+  }
+}

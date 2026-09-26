@@ -1,0 +1,122 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isBootstrappedAdmin() {
+      return isSignedIn() && (
+        request.auth.token.email == 'ashiq5023@gmail.com' ||
+        request.auth.token.email == 'admin@institution.local'
+      );
+    }
+
+    function isUserAdmin() {
+      return isBootstrappedAdmin() || (
+        isSignedIn() && (
+          exists(/databases/$(database)/documents/admins/$(request.auth.uid)) ||
+          (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+           get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['super_admin', 'director'])
+        )
+      );
+    }
+
+    // Default deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Admins collection
+    match /admins/{adminId} {
+      allow read: if isSignedIn();
+      allow write: if isUserAdmin();
+    }
+
+    // Users collection
+    match /users/{userId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && (request.auth.uid == userId || isUserAdmin());
+      allow update, delete: if isUserAdmin() || (isSignedIn() && request.auth.uid == userId);
+    }
+
+    // Courses collection
+    match /courses/{courseId} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn();
+    }
+
+    // Subjects collection
+    match /subjects/{subjectId} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn();
+    }
+
+    // Classes / Sessions
+    match /classes/{classId} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn();
+    }
+
+    // Attendance records
+    match /attendance/{attendanceId} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn();
+    }
+
+    // Tasks & Assignments
+    match /tasks/{taskId} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn();
+    }
+
+    // Task Submissions
+    match /taskSubmissions/{submissionId} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn();
+    }
+
+    // Creative Tasks
+    match /creativeTasks/{creativeTaskId} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn();
+    }
+
+    // Media library
+    match /media/{mediaId} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn();
+    }
+
+    // Leads & CRM
+    match /leads/{leadId} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn();
+    }
+
+    // Notifications
+    match /notifications/{notificationId} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn();
+    }
+
+    // Audit logs
+    match /auditLogs/{logId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn();
+      allow update, delete: if isUserAdmin();
+    }
+
+    // Settings
+    match /settings/{settingId} {
+      allow read: if isSignedIn();
+      allow write: if isUserAdmin();
+    }
+
+    // Test connection doc
+    match /test/{testId} {
+      allow read, write: if isSignedIn();
+    }
+  }
+}

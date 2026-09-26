@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="kg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#149490"/>
+      <stop offset="100%" stop-color="#0E6562"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="128" fill="url(#kg)"/>
+  <circle cx="256" cy="256" r="200" stroke="#FFFFFF" stroke-opacity="0.12" stroke-width="6" fill="none"/>
+  <!-- Bold Stylized Letter K -->
+  <path d="M168 128 L168 384 M168 256 L340 128 M236 206 L348 384" stroke="#FFFFFF" stroke-width="52" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+  <circle cx="340" cy="128" r="8" fill="#F59E0B" />
+</svg>
