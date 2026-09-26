@@ -15,7 +15,6 @@ import {
 import { useApp } from '../context/AppContext';
 import { PWAInstallButton } from './PWAInstallButton';
 import { GlobalSearch } from './GlobalSearch';
-import { DatabaseStatusBadge } from './DatabaseStatusBadge';
 import { UserRole } from '../types';
 
 export const Header: React.FC<{ onToggleSidebar?: () => void }> = ({ onToggleSidebar }) => {
@@ -129,9 +128,6 @@ export const Header: React.FC<{ onToggleSidebar?: () => void }> = ({ onToggleSid
         >
           <Search className="w-5 h-5" />
         </button>
-
-        {/* Cloud Firestore Database Live Status Indicator */}
-        <DatabaseStatusBadge />
 
         {/* PWA Install Button */}
         <div className="hidden sm:block">

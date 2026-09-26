@@ -23,9 +23,6 @@ import {
   Palette,
   Eye,
   CheckCircle2,
-  Database,
-  Cloud,
-  RefreshCw,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 
@@ -47,11 +44,6 @@ export const DashboardView: React.FC = () => {
     pointsHistory,
     setActiveTab,
     startClassSession,
-    isDatabaseConnected,
-    lastSyncTime,
-    firestoreDatabaseId,
-    refreshDatabaseSync,
-    isSyncing,
   } = useApp();
 
   const totalStudents = users.filter((u) => u.role === 'student').length;
@@ -742,47 +734,6 @@ export const DashboardView: React.FC = () => {
               <span>Classes</span>
             </button>
           </div>
-        </div>
-      </div>
-
-      {/* Cloud Firestore Live Synchronized Database Card */}
-      <div className="rounded-2xl bg-white p-4 border border-emerald-200/80 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-100 text-emerald-800 shrink-0">
-            <Database className="w-5 h-5" />
-          </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="relative flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-              </span>
-              <h4 className="text-xs font-bold text-slate-900">
-                Cloud Firestore Real-Time Database: {isDatabaseConnected ? 'Active & Live' : 'Connecting...'}
-              </h4>
-              <span className="hidden sm:inline-block rounded-full bg-emerald-50 px-2 py-0.5 text-[9px] font-bold text-emerald-700 border border-emerald-200">
-                Multi-Browser Sync
-              </span>
-            </div>
-            <p className="text-[11px] text-slate-500 mt-0.5">
-              Live DB: <span className="font-mono text-slate-700 font-semibold">{firestoreDatabaseId}</span> • Deletions and additions sync instantly across all browser windows.
-            </p>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
-          <span className="text-[10px] text-slate-400 font-medium">
-            {lastSyncTime ? `Synced: ${lastSyncTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}` : 'Syncing...'}
-          </span>
-          <button
-            onClick={() => refreshDatabaseSync()}
-            disabled={isSyncing}
-            className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 px-3 py-1.5 text-xs font-bold text-slate-700 transition cursor-pointer disabled:opacity-50"
-            title="Ping Firestore cloud connection"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin text-[#117B78]' : 'text-slate-500'}`} />
-            <span>{isSyncing ? 'Syncing...' : 'Sync Ping'}</span>
-          </button>
         </div>
       </div>
 

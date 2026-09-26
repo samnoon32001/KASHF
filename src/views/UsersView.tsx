@@ -27,6 +27,7 @@ import {
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { UserProfile, UserRole } from '../types';
+import { ALL_PERMISSIONS, ROLE_DEFAULT_PERMISSIONS, PermissionItem } from '../data/permissions';
 
 export const UsersView: React.FC<{ initialFilter?: 'all' | 'faculty' | 'student' | 'staff' }> = ({
   initialFilter = 'all',
@@ -42,6 +43,7 @@ export const UsersView: React.FC<{ initialFilter?: 'all' | 'faculty' | 'student'
     can,
     currentUser,
     globalSearchQuery,
+    setActiveTab,
   } = useApp();
 
   const [searchQuery, setSearchQuery] = useState(globalSearchQuery || '');
@@ -56,6 +58,46 @@ export const UsersView: React.FC<{ initialFilter?: 'all' | 'faculty' | 'student'
   const [showAddModal, setShowAddModal] = useState(false);
   const [selectedUserForEdit, setSelectedUserForEdit] = useState<UserProfile | null>(null);
   const [userToDelete, setUserToDelete] = useState<UserProfile | null>(null);
+
+  // User-Specific Permissions Modal State
+  const [userForPermissionsModal, setUserForPermissionsModal] = useState<UserProfile | null>(null);
+  const [userDraftPermissions, setUserDraftPermissions] = useState<string[]>([]);
+  const [permissionModalSearch, setPermissionModalSearch] = useState('');
+  const [permissionsSaveSuccess, setPermissionsSaveSuccess] = useState(false);
+
+  const handleOpenPermissionsModal = (u: UserProfile) => {
+    setUserForPermissionsModal(u);
+    const existing =
+      u.permissions && u.permissions.length > 0
+        ? u.permissions
+        : roles.find((r) => r.roleKey === u.role)?.permissions || ROLE_DEFAULT_PERMISSIONS[u.role] || [];
+    setUserDraftPermissions(existing);
+    setPermissionModalSearch('');
+    setPermissionsSaveSuccess(false);
+  };
+
+  const handleToggleUserModalPermission = (permId: string) => {
+    setUserDraftPermissions((prev) =>
+      prev.includes(permId) ? prev.filter((p) => p !== permId) : [...prev, permId]
+    );
+  };
+
+  const handleSyncUserModalRole = () => {
+    if (!userForPermissionsModal) return;
+    const roleDef = roles.find((r) => r.roleKey === userForPermissionsModal.role);
+    const defaultPerms = roleDef?.permissions || ROLE_DEFAULT_PERMISSIONS[userForPermissionsModal.role] || [];
+    setUserDraftPermissions(defaultPerms);
+  };
+
+  const handleSaveUserModalPermissions = () => {
+    if (!userForPermissionsModal) return;
+    updateUser(userForPermissionsModal.id, { permissions: userDraftPermissions });
+    setPermissionsSaveSuccess(true);
+    setTimeout(() => {
+      setPermissionsSaveSuccess(false);
+      setUserForPermissionsModal(null);
+    }, 1200);
+  };
 
   // Add User Form State
   const [formName, setFormName] = useState('');
@@ -231,6 +273,15 @@ export const UsersView: React.FC<{ initialFilter?: 'all' | 'faculty' | 'student'
         </div>
 
         <div className="flex flex-wrap items-center gap-2.5">
+          <button
+            onClick={() => setActiveTab('roles')}
+            className="flex items-center gap-1.5 rounded-xl border border-indigo-200 bg-indigo-50/70 px-3.5 py-2.5 text-xs font-bold text-indigo-700 hover:bg-indigo-100 transition cursor-pointer"
+            title="Edit system-wide role permissions"
+          >
+            <Shield className="w-4 h-4 text-indigo-600" />
+            <span>Role Permissions Matrix</span>
+          </button>
+
           <button
             onClick={handleExport}
             className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-xs font-bold text-slate-700 hover:bg-slate-50 transition cursor-pointer"
@@ -411,6 +462,16 @@ export const UsersView: React.FC<{ initialFilter?: 'all' | 'faculty' | 'student'
 
                     <td className="py-4 px-6 text-right">
                       <div className="flex items-center justify-end gap-1">
+                        {canEditUsers && (
+                          <button
+                            onClick={() => handleOpenPermissionsModal(user)}
+                            title="Edit Permissions & Privileges"
+                            className="p-1.5 rounded-lg text-slate-400 hover:bg-indigo-50 hover:text-indigo-600 cursor-pointer transition"
+                          >
+                            <Shield className="w-4 h-4" />
+                          </button>
+                        )}
+
                         {canEditUsers && (
                           <button
                             onClick={() => handleOpenEditModal(user)}
@@ -810,6 +871,155 @@ export const UsersView: React.FC<{ initialFilter?: 'all' | 'faculty' | 'student'
               >
                 Delete Account
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* EDIT USER PERMISSIONS MODAL */}
+      {userForPermissionsModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 animate-in fade-in">
+          <div className="w-full max-w-2xl max-h-[90vh] flex flex-col rounded-3xl bg-white shadow-2xl border border-slate-100 animate-in zoom-in-95 overflow-hidden">
+            {/* Modal Header */}
+            <div className="p-6 border-b border-slate-100 flex items-center justify-between">
+              <div>
+                <div className="flex items-center gap-2">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-indigo-100 text-indigo-700">
+                    <Shield className="w-4 h-4" />
+                  </div>
+                  <h3 className="text-base font-bold text-slate-900">
+                    Custom Permissions: {userForPermissionsModal.name}
+                  </h3>
+                  <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-700 capitalize">
+                    {userForPermissionsModal.role.replace('_', ' ')}
+                  </span>
+                </div>
+                <p className="text-xs text-slate-500 mt-1">
+                  Email: <span className="font-mono text-slate-700 font-semibold">{userForPermissionsModal.email}</span> • Department: {userForPermissionsModal.department}
+                </p>
+              </div>
+
+              <button
+                onClick={() => setUserForPermissionsModal(null)}
+                className="p-1.5 rounded-xl hover:bg-slate-100 text-slate-400 transition cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Quick Actions & Search */}
+            <div className="p-4 bg-slate-50 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+                <input
+                  type="text"
+                  value={permissionModalSearch}
+                  onChange={(e) => setPermissionModalSearch(e.target.value)}
+                  placeholder="Filter permissions..."
+                  className="w-full h-9 rounded-xl border border-slate-200 bg-white pl-9 pr-3 text-xs outline-none focus:border-[#117B78]"
+                />
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleSyncUserModalRole}
+                  className="px-3 py-1.5 rounded-xl border border-slate-200 bg-white text-[11px] font-bold text-slate-700 hover:bg-slate-100 transition cursor-pointer"
+                >
+                  Sync with Role Default
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setUserDraftPermissions(ALL_PERMISSIONS.map((p) => p.id))}
+                  className="px-2.5 py-1.5 rounded-xl border border-slate-200 bg-white text-[11px] font-bold text-slate-700 hover:bg-slate-100 transition cursor-pointer"
+                >
+                  Grant All
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setUserDraftPermissions([])}
+                  className="px-2.5 py-1.5 rounded-xl border border-slate-200 bg-white text-[11px] font-bold text-slate-700 hover:bg-slate-100 transition cursor-pointer"
+                >
+                  Revoke All
+                </button>
+              </div>
+            </div>
+
+            {/* Modal Body: Categorized Checkboxes */}
+            <div className="p-6 overflow-y-auto space-y-4 flex-1 max-h-[55vh]">
+              {permissionsSaveSuccess && (
+                <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-xs font-bold text-emerald-800 flex items-center gap-2">
+                  <CheckCircle className="w-4 h-4 text-emerald-600" />
+                  <span>Permissions successfully saved to Cloud Firestore for this user!</span>
+                </div>
+              )}
+
+              {ALL_PERMISSIONS.filter((p) => {
+                const q = permissionModalSearch.toLowerCase().trim();
+                if (!q) return true;
+                return (
+                  p.label.toLowerCase().includes(q) ||
+                  p.id.toLowerCase().includes(q) ||
+                  p.description.toLowerCase().includes(q) ||
+                  p.category.toLowerCase().includes(q)
+                );
+              }).map((perm) => {
+                const isChecked = userDraftPermissions.includes(perm.id);
+
+                return (
+                  <label
+                    key={perm.id}
+                    className={`flex items-start gap-3 p-3 rounded-2xl border cursor-pointer transition select-none ${
+                      isChecked
+                        ? 'bg-emerald-50/40 border-emerald-300 shadow-xs'
+                        : 'bg-white border-slate-200 hover:bg-slate-50'
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={isChecked}
+                      onChange={() => handleToggleUserModalPermission(perm.id)}
+                      className="h-4 w-4 mt-0.5 rounded border-slate-300 accent-[#117B78] focus:ring-[#117B78]"
+                    />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2">
+                          <p className="text-xs font-bold text-slate-900">{perm.label}</p>
+                          <span className="rounded bg-slate-100 px-1.5 py-0.2 text-[9px] font-bold text-slate-500 uppercase">
+                            {perm.category}
+                          </span>
+                        </div>
+                        <span className="text-[10px] font-mono text-slate-400">{perm.id}</span>
+                      </div>
+                      <p className="text-[11px] text-slate-500 mt-0.5">{perm.description}</p>
+                    </div>
+                  </label>
+                );
+              })}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-4 border-t border-slate-100 bg-slate-50 flex items-center justify-between">
+              <span className="text-xs text-slate-500">
+                Active permissions: <strong className="text-slate-900">{userDraftPermissions.length}</strong> of {ALL_PERMISSIONS.length}
+              </span>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setUserForPermissionsModal(null)}
+                  className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 transition cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSaveUserModalPermissions}
+                  className="rounded-xl bg-[#117B78] px-5 py-2 text-xs font-bold text-white shadow-sm hover:bg-[#0D9C88] transition cursor-pointer"
+                >
+                  Save Permissions to Cloud
+                </button>
+              </div>
             </div>
           </div>
         </div>

@@ -768,9 +768,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const can = useCallback(
     (permission: string) => {
+      if (!currentUser) return false;
+      if (currentUser.role === 'super_admin') return true;
+      // 1. If user has explicit customized permissions array
+      if (currentUser.permissions && currentUser.permissions.length > 0) {
+        return currentUser.permissions.includes(permission);
+      }
+      // 2. Otherwise check dynamic role permissions from state (synced with Firestore)
+      const roleDef = roles.find((r) => r.roleKey === currentUser.role || r.id === currentUser.role);
+      if (roleDef && roleDef.permissions) {
+        return roleDef.permissions.includes(permission);
+      }
       return hasPermission(currentUser, permission);
     },
-    [currentUser]
+    [currentUser, roles]
   );
 
   const logAudit = useCallback(
@@ -989,7 +1000,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     let updatedRole: RoleDefinition | null = null;
     setRoles((prev) =>
       prev.map((r) => {
-        if (r.id === id) {
+        if (r.id === id || r.roleKey === id) {
           const updated = { ...r, ...updates };
           updatedRole = updated;
           return updated;
@@ -1000,7 +1011,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (updatedRole) {
       saveDocument('roles', updatedRole);
     }
-    logAudit('ROLE_UPDATED', 'Roles', `Updated role ID: ${id}`);
+    logAudit('ROLE_UPDATED', 'Roles', `Updated role: ${id}`);
   };
 
   const deleteRole = (id: string) => {

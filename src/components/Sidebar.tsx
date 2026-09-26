@@ -312,13 +312,20 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen = false, onClose }) => 
 
         {/* Footer info box */}
         <div className="border-t border-slate-100 p-4">
-          <div className="rounded-xl bg-[#117B78]/5 p-3 border border-[#117B78]/10">
+          <div
+            onClick={() => {
+              setActiveTab('settings');
+              handleClose();
+            }}
+            className="rounded-xl bg-[#117B78]/5 p-3 border border-[#117B78]/10 cursor-pointer hover:bg-[#117B78]/10 transition"
+            title="Click to view Cloud Database details in Settings"
+          >
             <div className="flex items-center gap-2">
               <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-              <p className="text-[11px] font-bold text-slate-800">PWA & Firestore Online</p>
+              <p className="text-[11px] font-bold text-slate-800">Cloud Firestore Online</p>
             </div>
             <p className="text-[10px] text-slate-500 mt-0.5">
-              Synced with institutional database
+              View Database details in Settings →
             </p>
           </div>
         </div>
