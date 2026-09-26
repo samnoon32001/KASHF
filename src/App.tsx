@@ -43,6 +43,8 @@ const MainLayout: React.FC = () => {
     loginWithCredentials,
     settings,
     isOffline,
+    isDatabaseConnected,
+    firestoreDatabaseId,
   } = useApp();
 
   // Login form state
@@ -212,6 +214,18 @@ const MainLayout: React.FC = () => {
                 )}
               </button>
             </form>
+
+            {/* Live Database Connected Status */}
+            <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-center gap-2 text-[10px] text-slate-500">
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+              </span>
+              <span className="font-semibold text-slate-700">
+                Cloud Firestore: {isDatabaseConnected ? 'Connected & Live' : 'Connecting...'}
+              </span>
+              <span className="font-mono text-[9px] text-slate-400">({firestoreDatabaseId.slice(0, 16)}...)</span>
+            </div>
           </div>
         </div>
       </div>

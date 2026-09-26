@@ -19,7 +19,17 @@ import {
   InstitutionSettings,
   StudentPointsHistory,
 } from '../types';
-import { auth, loginWithGoogle, logoutUser, testFirestoreConnection } from '../firebase';
+import { auth, loginWithGoogle, logoutUser, testFirestoreConnection, firebaseConfig } from '../firebase';
+import {
+  subscribeToCollection,
+  subscribeToDocument,
+  seedIfEmpty,
+  saveDocument,
+  deleteDocument,
+  saveSingletonDocument,
+  isCollectionSeeded,
+  markCollectionSeeded,
+} from '../services/firestoreSync';
 import { ALL_PERMISSIONS, DEFAULT_ROLE_DEFINITIONS, hasPermission } from '../data/permissions';
 import {
   INITIAL_SETTINGS,
@@ -65,6 +75,14 @@ interface AppContextType {
   setGlobalSearchQuery: (q: string) => void;
   showFirstLoginModal: boolean;
   setShowFirstLoginModal: (show: boolean) => void;
+
+  // Cloud Database Connection State
+  isDatabaseConnected: boolean;
+  isSyncing: boolean;
+  lastSyncTime: Date | null;
+  firebaseProjectId: string;
+  firestoreDatabaseId: string;
+  refreshDatabaseSync: () => Promise<void>;
 
   // Auth & Roles
   loginWithCredentials: (identifier: string, password: string, rememberMe?: boolean) => Promise<boolean>;
@@ -494,6 +512,157 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [globalSearchQuery, setGlobalSearchQuery] = useState<string>('');
   const [showFirstLoginModal, setShowFirstLoginModal] = useState<boolean>(false);
 
+  // Cloud Database Connection State
+  const [isDatabaseConnected, setIsDatabaseConnected] = useState<boolean>(false);
+  const [isSyncing, setIsSyncing] = useState<boolean>(false);
+  const [lastSyncTime, setLastSyncTime] = useState<Date | null>(null);
+
+  const firebaseProjectId = firebaseConfig.projectId;
+  const firestoreDatabaseId = firebaseConfig.firestoreDatabaseId;
+
+  const refreshDatabaseSync = async () => {
+    setIsSyncing(true);
+    try {
+      await testFirestoreConnection();
+      setIsDatabaseConnected(true);
+      setLastSyncTime(new Date());
+    } catch (e) {
+      console.warn('Database ping failed:', e);
+      setIsDatabaseConnected(false);
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
+  // Real-Time Cloud Firestore Sync & Seeding across all browsers and devices
+  useEffect(() => {
+    let unsubs: (() => void)[] = [];
+
+    const initFirestoreSync = async () => {
+      try {
+        setIsSyncing(true);
+        await testFirestoreConnection();
+        setIsDatabaseConnected(true);
+        setLastSyncTime(new Date());
+
+        // 1. Seed initial data to Cloud Firestore if collection has never been initialized
+        await Promise.all([
+          seedIfEmpty('users', users),
+          seedIfEmpty('roles', roles),
+          seedIfEmpty('courses', courses),
+          seedIfEmpty('subjects', subjects),
+          seedIfEmpty('classes', classes),
+          seedIfEmpty('recordedClasses', recordedClasses),
+          seedIfEmpty('tasks', tasks),
+          seedIfEmpty('creativeTasks', creativeTasks),
+          seedIfEmpty('media', media),
+          seedIfEmpty('leads', leads),
+          seedIfEmpty('notifications', notifications),
+          seedIfEmpty('auditLogs', auditLogs),
+          seedIfEmpty('pointsHistory', pointsHistory),
+        ]);
+
+        // Seed settings singleton if empty
+        const settingsSeeded = await isCollectionSeeded('settings');
+        if (!settingsSeeded) {
+          await saveSingletonDocument('settings', 'institution', settings);
+          await markCollectionSeeded('settings');
+        }
+
+        // 2. Real-time active subscriptions: Firestore -> Client state
+        // When any document is deleted or modified in any browser, all listeners update immediately!
+        unsubs.push(
+          subscribeToCollection<UserProfile>('users', (data) => {
+            if (data && data.length > 0) {
+              setUsers(data);
+              setLastSyncTime(new Date());
+            }
+          }),
+          subscribeToCollection<RoleDefinition>('roles', (data) => {
+            if (data && data.length > 0) {
+              setRoles(data);
+              setLastSyncTime(new Date());
+            }
+          }),
+          subscribeToCollection<Course>('courses', (data) => {
+            setCourses(data);
+            setLastSyncTime(new Date());
+          }),
+          subscribeToCollection<Subject>('subjects', (data) => {
+            setSubjects(data);
+            setLastSyncTime(new Date());
+          }),
+          subscribeToCollection<ClassSession>('classes', (data) => {
+            setClasses(data);
+            setLastSyncTime(new Date());
+          }),
+          subscribeToCollection<RecordedClass>('recordedClasses', (data) => {
+            setRecordedClasses(data);
+            setLastSyncTime(new Date());
+          }),
+          subscribeToCollection<AttendanceSession>('attendance', (data) => {
+            setAttendance(data);
+            setLastSyncTime(new Date());
+          }),
+          subscribeToCollection<Task>('tasks', (data) => {
+            setTasks(data);
+            setLastSyncTime(new Date());
+          }),
+          subscribeToCollection<TaskSubmission>('taskSubmissions', (data) => {
+            setTaskSubmissions(data);
+            setLastSyncTime(new Date());
+          }),
+          subscribeToCollection<CreativeTask>('creativeTasks', (data) => {
+            setCreativeTasks(data);
+            setLastSyncTime(new Date());
+          }),
+          subscribeToCollection<MediaItem>('media', (data) => {
+            setMedia(data);
+            setLastSyncTime(new Date());
+          }),
+          subscribeToCollection<Lead>('leads', (data) => {
+            setLeads(data);
+            setLastSyncTime(new Date());
+          }),
+          subscribeToCollection<Notification>('notifications', (data) => {
+            setNotifications(data);
+            setLastSyncTime(new Date());
+          }),
+          subscribeToCollection<AuditLog>('auditLogs', (data) => {
+            if (data && data.length > 0) {
+              const sorted = [...data].sort(
+                (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+              );
+              setAuditLogs(sorted);
+              setLastSyncTime(new Date());
+            }
+          }),
+          subscribeToCollection<StudentPointsHistory>('pointsHistory', (data) => {
+            setPointsHistory(data);
+            setLastSyncTime(new Date());
+          }),
+          subscribeToDocument<InstitutionSettings>('settings', 'institution', (data) => {
+            if (data) {
+              setSettings((prev) => ({ ...prev, ...data }));
+              setLastSyncTime(new Date());
+            }
+          })
+        );
+      } catch (err) {
+        console.error('[Firestore Connection / Subscription Error]:', err);
+        setIsDatabaseConnected(false);
+      } finally {
+        setIsSyncing(false);
+      }
+    };
+
+    initFirestoreSync();
+
+    return () => {
+      unsubs.forEach((unsub) => unsub());
+    };
+  }, []);
+
   // Synchronize with LocalStorage for offline PWA persistence
   useEffect(() => {
     try {
@@ -539,11 +708,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     currentUser,
   ]);
 
-  // Test Firestore Connection on boot
-  useEffect(() => {
-    testFirestoreConnection();
-  }, []);
-
   // Firebase Auth state listener
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
@@ -571,6 +735,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               lastLogin: new Date().toISOString(),
             };
             setCurrentUser(existing);
+            saveDocument('users', existing);
             return [...prevUsers, existing];
           } else {
             // Update last login
@@ -580,6 +745,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               photoUrl: user.photoURL || existing.photoUrl,
             };
             setCurrentUser(updated);
+            saveDocument('users', updated);
             return prevUsers.map((u) => (u.id === existing!.id ? updated : u));
           }
         });
@@ -620,6 +786,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         timestamp: new Date().toISOString(),
       };
       setAuditLogs((prev) => [newLog, ...prev.slice(0, 200)]);
+      saveDocument('auditLogs', newLog);
     },
     [currentUser]
   );
@@ -753,20 +920,26 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           : roles.find((r) => r.roleKey === userData.role)?.permissions || [],
     };
     setUsers((prev) => [...prev, newUser]);
+    saveDocument('users', newUser);
     logAudit('USER_CREATED', 'Users', `Added user ${newUser.name} with role ${newUser.role}`);
   };
 
   const updateUser = (id: string, updates: Partial<UserProfile>) => {
+    let updatedUser: UserProfile | null = null;
     setUsers((prev) =>
       prev.map((u) => {
         if (u.id === id) {
           const updated = { ...u, ...updates };
+          updatedUser = updated;
           if (currentUser?.id === id) setCurrentUser(updated);
           return updated;
         }
         return u;
       })
     );
+    if (updatedUser) {
+      saveDocument('users', updatedUser);
+    }
     logAudit('USER_UPDATED', 'Users', `Updated user ID: ${id}`);
   };
 
@@ -777,20 +950,27 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return;
     }
     setUsers((prev) => prev.filter((u) => u.id !== id));
+    deleteDocument('users', id);
     logAudit('USER_DELETED', 'Users', `Deleted user ID: ${id} (${target?.name})`);
   };
 
   const toggleUserStatus = (id: string) => {
+    let updatedUser: UserProfile | null = null;
     setUsers((prev) =>
       prev.map((u) => {
         if (u.id === id) {
           const nextStatus = u.status === 'active' ? 'inactive' : 'active';
           logAudit('USER_STATUS_TOGGLE', 'Users', `${u.name} status changed to ${nextStatus}`);
-          return { ...u, status: nextStatus };
+          const updated = { ...u, status: nextStatus };
+          updatedUser = updated;
+          return updated;
         }
         return u;
       })
     );
+    if (updatedUser) {
+      saveDocument('users', updatedUser);
+    }
   };
 
   // Roles management
@@ -801,11 +981,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       isSystem: false,
     };
     setRoles((prev) => [...prev, newRole]);
+    saveDocument('roles', newRole);
     logAudit('ROLE_CREATED', 'Roles', `Created custom role: ${newRole.name}`);
   };
 
   const updateRole = (id: string, updates: Partial<RoleDefinition>) => {
-    setRoles((prev) => prev.map((r) => (r.id === id ? { ...r, ...updates } : r)));
+    let updatedRole: RoleDefinition | null = null;
+    setRoles((prev) =>
+      prev.map((r) => {
+        if (r.id === id) {
+          const updated = { ...r, ...updates };
+          updatedRole = updated;
+          return updated;
+        }
+        return r;
+      })
+    );
+    if (updatedRole) {
+      saveDocument('roles', updatedRole);
+    }
     logAudit('ROLE_UPDATED', 'Roles', `Updated role ID: ${id}`);
   };
 
@@ -816,6 +1010,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return;
     }
     setRoles((prev) => prev.filter((r) => r.id !== id));
+    deleteDocument('roles', id);
     logAudit('ROLE_DELETED', 'Roles', `Deleted role: ${target?.name}`);
   };
 
@@ -826,16 +1021,31 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       id: 'course-' + Date.now(),
     };
     setCourses((prev) => [...prev, newCourse]);
+    saveDocument('courses', newCourse);
     logAudit('COURSE_CREATED', 'Academics', `Added course: ${newCourse.name}`);
   };
 
   const updateCourse = (id: string, updates: Partial<Course>) => {
-    setCourses((prev) => prev.map((c) => (c.id === id ? { ...c, ...updates } : c)));
+    let updatedCourse: Course | null = null;
+    setCourses((prev) =>
+      prev.map((c) => {
+        if (c.id === id) {
+          const updated = { ...c, ...updates };
+          updatedCourse = updated;
+          return updated;
+        }
+        return c;
+      })
+    );
+    if (updatedCourse) {
+      saveDocument('courses', updatedCourse);
+    }
     logAudit('COURSE_UPDATED', 'Academics', `Updated course ID: ${id}`);
   };
 
   const deleteCourse = (id: string) => {
     setCourses((prev) => prev.filter((c) => c.id !== id));
+    deleteDocument('courses', id);
     logAudit('COURSE_DELETED', 'Academics', `Deleted course ID: ${id}`);
   };
 
@@ -846,16 +1056,31 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       id: 'subj-' + Date.now(),
     };
     setSubjects((prev) => [...prev, newSubj]);
+    saveDocument('subjects', newSubj);
     logAudit('SUBJECT_CREATED', 'Academics', `Added subject: ${newSubj.name}`);
   };
 
   const updateSubject = (id: string, updates: Partial<Subject>) => {
-    setSubjects((prev) => prev.map((s) => (s.id === id ? { ...s, ...updates } : s)));
+    let updatedSubj: Subject | null = null;
+    setSubjects((prev) =>
+      prev.map((s) => {
+        if (s.id === id) {
+          const updated = { ...s, ...updates };
+          updatedSubj = updated;
+          return updated;
+        }
+        return s;
+      })
+    );
+    if (updatedSubj) {
+      saveDocument('subjects', updatedSubj);
+    }
     logAudit('SUBJECT_UPDATED', 'Academics', `Updated subject ID: ${id}`);
   };
 
   const deleteSubject = (id: string) => {
     setSubjects((prev) => prev.filter((s) => s.id !== id));
+    deleteDocument('subjects', id);
     logAudit('SUBJECT_DELETED', 'Academics', `Deleted subject ID: ${id}`);
   };
 
@@ -867,19 +1092,24 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       attendanceSubmitted: false,
     };
     setClasses((prev) => [...prev, newSession]);
+    saveDocument('classes', newSession);
 
     // Send notifications to students enrolled in this course
     const course = courses.find((c) => c.id === sessionData.courseId);
     if (course && course.studentIds.length > 0) {
-      const notifs: Notification[] = course.studentIds.map((studentId) => ({
-        id: 'notif-class-' + Date.now() + '-' + studentId,
-        userId: studentId,
-        title: `New Class: ${sessionData.subjectName}`,
-        message: `${sessionData.courseName} session on ${sessionData.date} at ${sessionData.startTime}.`,
-        type: 'class',
-        read: false,
-        createdAt: new Date().toISOString(),
-      }));
+      const notifs: Notification[] = course.studentIds.map((studentId) => {
+        const notifItem: Notification = {
+          id: 'notif-class-' + Date.now() + '-' + studentId,
+          userId: studentId,
+          title: `New Class: ${sessionData.subjectName}`,
+          message: `${sessionData.courseName} session on ${sessionData.date} at ${sessionData.startTime}.`,
+          type: 'class',
+          read: false,
+          createdAt: new Date().toISOString(),
+        };
+        saveDocument('notifications', notifItem);
+        return notifItem;
+      });
       setNotifications((prev) => [...notifs, ...prev]);
     }
 
@@ -887,47 +1117,88 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const updateClassSession = (id: string, updates: Partial<ClassSession>) => {
-    setClasses((prev) => prev.map((c) => (c.id === id ? { ...c, ...updates } : c)));
+    let updatedClass: ClassSession | null = null;
+    setClasses((prev) =>
+      prev.map((c) => {
+        if (c.id === id) {
+          const updated = { ...c, ...updates };
+          updatedClass = updated;
+          return updated;
+        }
+        return c;
+      })
+    );
+    if (updatedClass) {
+      saveDocument('classes', updatedClass);
+    }
     logAudit('CLASS_UPDATED', 'Classes', `Updated class session ID: ${id}`);
   };
 
   const deleteClassSession = (id: string) => {
     setClasses((prev) => prev.filter((c) => c.id !== id));
+    deleteDocument('classes', id);
     logAudit('CLASS_DELETED', 'Classes', `Deleted class session ID: ${id}`);
   };
 
   const startClassSession = (id: string) => {
+    let updatedClass: ClassSession | null = null;
     setClasses((prev) =>
-      prev.map((c) =>
-        c.id === id
-          ? {
-              ...c,
-              status: 'live',
-              startedAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-            }
-          : c
-      )
+      prev.map((c) => {
+        if (c.id === id) {
+          const updated: ClassSession = {
+            ...c,
+            status: 'live',
+            startedAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          };
+          updatedClass = updated;
+          return updated;
+        }
+        return c;
+      })
     );
+    if (updatedClass) {
+      saveDocument('classes', updatedClass);
+    }
     logAudit('CLASS_STARTED', 'Classes', `Started Google Meet class session ID: ${id}`);
   };
 
   const endClassSession = (id: string, recordingUrl?: string) => {
+    let updatedClass: ClassSession | null = null;
     setClasses((prev) =>
-      prev.map((c) =>
-        c.id === id
-          ? {
-              ...c,
-              status: 'completed',
-              recordingUrl: recordingUrl || c.recordingUrl,
-            }
-          : c
-      )
+      prev.map((c) => {
+        if (c.id === id) {
+          const updated: ClassSession = {
+            ...c,
+            status: 'completed',
+            recordingUrl: recordingUrl || c.recordingUrl,
+          };
+          updatedClass = updated;
+          return updated;
+        }
+        return c;
+      })
     );
+    if (updatedClass) {
+      saveDocument('classes', updatedClass);
+    }
     logAudit('CLASS_ENDED', 'Classes', `Completed class session ID: ${id}`);
   };
 
   const updateClassNotes = (id: string, notes: string) => {
-    setClasses((prev) => prev.map((c) => (c.id === id ? { ...c, notes } : c)));
+    let updatedClass: ClassSession | null = null;
+    setClasses((prev) =>
+      prev.map((c) => {
+        if (c.id === id) {
+          const updated = { ...c, notes };
+          updatedClass = updated;
+          return updated;
+        }
+        return c;
+      })
+    );
+    if (updatedClass) {
+      saveDocument('classes', updatedClass);
+    }
   };
 
   // Recorded Classes
@@ -937,16 +1208,31 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       id: 'rec-' + Date.now(),
     };
     setRecordedClasses((prev) => [newRec, ...prev]);
+    saveDocument('recordedClasses', newRec);
     logAudit('RECORDING_UPLOADED', 'Classes', `Added recorded class: ${newRec.title}`);
   };
 
   const updateRecordedClass = (id: string, updates: Partial<RecordedClass>) => {
-    setRecordedClasses((prev) => prev.map((r) => (r.id === id ? { ...r, ...updates } : r)));
+    let updatedRec: RecordedClass | null = null;
+    setRecordedClasses((prev) =>
+      prev.map((r) => {
+        if (r.id === id) {
+          const updated = { ...r, ...updates };
+          updatedRec = updated;
+          return updated;
+        }
+        return r;
+      })
+    );
+    if (updatedRec) {
+      saveDocument('recordedClasses', updatedRec);
+    }
     logAudit('RECORDING_UPDATED', 'Classes', `Updated recording ID: ${id}`);
   };
 
   const deleteRecordedClass = (id: string) => {
     setRecordedClasses((prev) => prev.filter((r) => r.id !== id));
+    deleteDocument('recordedClasses', id);
     logAudit('RECORDING_DELETED', 'Classes', `Deleted recording ID: ${id}`);
   };
 
@@ -957,10 +1243,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       id: 'att-' + Date.now(),
     };
     setAttendance((prev) => [newSession, ...prev]);
+    saveDocument('attendance', newSession);
 
     // Mark class session as attendanceSubmitted
     setClasses((prev) =>
-      prev.map((c) => (c.id === sessionData.classId ? { ...c, attendanceSubmitted: true } : c))
+      prev.map((c) => {
+        if (c.id === sessionData.classId) {
+          const updated = { ...c, attendanceSubmitted: true };
+          saveDocument('classes', updated);
+          return updated;
+        }
+        return c;
+      })
     );
 
     // Award points to present students (+5 points per present class!)
@@ -974,6 +1268,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           date: sessionData.date,
         };
         setPointsHistory((prev) => [pointLog, ...prev]);
+        saveDocument('pointsHistory', pointLog);
       }
     });
 
@@ -989,17 +1284,37 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       createdAt: new Date().toISOString(),
     };
     setTasks((prev) => [newTask, ...prev]);
+    saveDocument('tasks', newTask);
     logAudit('TASK_CREATED', 'Tasks', `Created assignment: ${newTask.title} (${newTask.points} pts)`);
   };
 
   const updateTask = (id: string, updates: Partial<Task>) => {
-    setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, ...updates } : t)));
+    let updatedTask: Task | null = null;
+    setTasks((prev) =>
+      prev.map((t) => {
+        if (t.id === id) {
+          const updated = { ...t, ...updates };
+          updatedTask = updated;
+          return updated;
+        }
+        return t;
+      })
+    );
+    if (updatedTask) {
+      saveDocument('tasks', updatedTask);
+    }
     logAudit('TASK_UPDATED', 'Tasks', `Updated task ID: ${id}`);
   };
 
   const deleteTask = (id: string) => {
     setTasks((prev) => prev.filter((t) => t.id !== id));
+    deleteDocument('tasks', id);
+
+    // Also delete any associated task submissions
+    const subsToDelete = taskSubmissions.filter((s) => s.taskId === id);
+    subsToDelete.forEach((s) => deleteDocument('taskSubmissions', s.id));
     setTaskSubmissions((prev) => prev.filter((s) => s.taskId !== id));
+
     logAudit('TASK_DELETED', 'Tasks', `Deleted task ID: ${id}`);
   };
 
@@ -1016,20 +1331,36 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       pointsAwarded: 0,
     };
     setTaskSubmissions((prev) => [newSubmission, ...prev]);
+    saveDocument('taskSubmissions', newSubmission);
     logAudit('TASK_SUBMITTED', 'Tasks', `Student ${studentName} submitted task ID: ${taskId}`);
   };
 
   const updateTaskSubmission = (id: string, updates: Partial<TaskSubmission>) => {
-    setTaskSubmissions((prev) => prev.map((s) => (s.id === id ? { ...s, ...updates } : s)));
+    let updatedSub: TaskSubmission | null = null;
+    setTaskSubmissions((prev) =>
+      prev.map((s) => {
+        if (s.id === id) {
+          const updated = { ...s, ...updates };
+          updatedSub = updated;
+          return updated;
+        }
+        return s;
+      })
+    );
+    if (updatedSub) {
+      saveDocument('taskSubmissions', updatedSub);
+    }
     logAudit('SUBMISSION_UPDATED', 'Tasks', `Updated submission ID: ${id}`);
   };
 
   const deleteTaskSubmission = (id: string) => {
     setTaskSubmissions((prev) => prev.filter((s) => s.id !== id));
+    deleteDocument('taskSubmissions', id);
     logAudit('SUBMISSION_DELETED', 'Tasks', `Deleted submission ID: ${id}`);
   };
 
   const gradeTaskSubmission = (submissionId: string, status: 'approved' | 'rejected', points: number, feedback: string) => {
+    let updatedSub: TaskSubmission | null = null;
     setTaskSubmissions((prev) =>
       prev.map((sub) => {
         if (sub.id === submissionId) {
@@ -1043,6 +1374,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               taskId: sub.taskId,
             };
             setPointsHistory((p) => [pointEntry, ...p]);
+            saveDocument('pointsHistory', pointEntry);
 
             // Notify student
             const notif: Notification = {
@@ -1055,17 +1387,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               createdAt: new Date().toISOString(),
             };
             setNotifications((n) => [notif, ...n]);
+            saveDocument('notifications', notif);
           }
-          return {
+          const updated = {
             ...sub,
             status,
             pointsAwarded: points,
             feedback,
           };
+          updatedSub = updated;
+          return updated;
         }
         return sub;
       })
     );
+    if (updatedSub) {
+      saveDocument('taskSubmissions', updatedSub);
+    }
     logAudit('TASK_GRADED', 'Tasks', `Graded submission ID: ${submissionId} as ${status}`);
   };
 
@@ -1080,6 +1418,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       taskId,
     };
     setPointsHistory((prev) => [pointEntry, ...prev]);
+    saveDocument('pointsHistory', pointEntry);
 
     // Send notification
     const student = users.find((u) => u.id === studentId);
@@ -1094,12 +1433,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         createdAt: new Date().toISOString(),
       };
       setNotifications((prev) => [notif, ...prev]);
+      saveDocument('notifications', notif);
     }
     logAudit('POINTS_AWARDED', 'Points', `${points} pts to student ID: ${studentId} (${reason})`);
   };
 
   const deletePointsRecord = (id: string) => {
     setPointsHistory((prev) => prev.filter((p) => p.id !== id));
+    deleteDocument('pointsHistory', id);
     logAudit('POINTS_REMOVED', 'Points', `Removed points record ID: ${id}`);
   };
 
@@ -1112,18 +1453,31 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       revisions: [],
     };
     setCreativeTasks((prev) => [newTask, ...prev]);
+    saveDocument('creativeTasks', newTask);
     logAudit('CREATIVE_TASK_CREATED', 'Creative', `Created creative task: ${newTask.title}`);
   };
 
   const updateCreativeTaskStatus = (id: string, status: CreativeTask['status'], finalFile?: string) => {
+    let updatedTask: CreativeTask | null = null;
     setCreativeTasks((prev) =>
-      prev.map((t) => (t.id === id ? { ...t, status, finalFile: finalFile || t.finalFile } : t))
+      prev.map((t) => {
+        if (t.id === id) {
+          const updated: CreativeTask = { ...t, status, finalFile: finalFile || t.finalFile };
+          updatedTask = updated;
+          return updated;
+        }
+        return t;
+      })
     );
+    if (updatedTask) {
+      saveDocument('creativeTasks', updatedTask);
+    }
     logAudit('CREATIVE_STATUS_CHANGE', 'Creative', `Task ${id} moved to status: ${status}`);
   };
 
   const addCreativeTaskComment = (taskId: string, text: string) => {
     if (!currentUser) return;
+    let updatedTask: CreativeTask | null = null;
     setCreativeTasks((prev) =>
       prev.map((t) => {
         if (t.id === taskId) {
@@ -1134,14 +1488,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             text,
             timestamp: 'Just now',
           };
-          return { ...t, comments: [...t.comments, newComment] };
+          const updated = { ...t, comments: [...t.comments, newComment] };
+          updatedTask = updated;
+          return updated;
         }
         return t;
       })
     );
+    if (updatedTask) {
+      saveDocument('creativeTasks', updatedTask);
+    }
   };
 
   const requestCreativeRevision = (taskId: string, note: string) => {
+    let updatedTask: CreativeTask | null = null;
     setCreativeTasks((prev) =>
       prev.map((t) => {
         if (t.id === taskId) {
@@ -1150,15 +1510,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             note,
             requestedAt: new Date().toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }),
           };
-          return {
+          const updated = {
             ...t,
-            status: 'revision_required',
+            status: 'revision_required' as const,
             revisions: [...(t.revisions || []), revision],
           };
+          updatedTask = updated;
+          return updated;
         }
         return t;
       })
     );
+    if (updatedTask) {
+      saveDocument('creativeTasks', updatedTask);
+    }
     logAudit('REVISION_REQUESTED', 'Creative', `Revision requested on task ID: ${taskId}`);
   };
 
@@ -1170,11 +1535,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       uploadedAt: new Date().toISOString().split('T')[0],
     };
     setMedia((prev) => [newItem, ...prev]);
+    saveDocument('media', newItem);
     logAudit('MEDIA_UPLOADED', 'Media', `Uploaded asset: ${newItem.name}`);
   };
 
   const deleteMediaItem = (id: string) => {
     setMedia((prev) => prev.filter((m) => m.id !== id));
+    deleteDocument('media', id);
     logAudit('MEDIA_DELETED', 'Media', `Removed media asset ID: ${id}`);
   };
 
@@ -1195,26 +1562,34 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       ],
     };
     setLeads((prev) => [newLead, ...prev]);
+    saveDocument('leads', newLead);
     logAudit('LEAD_CREATED', 'CRM', `Added lead: ${newLead.name} (${newLead.phone})`);
   };
 
   const updateLeadStatus = (id: string, status: Lead['status']) => {
+    let updatedLead: Lead | null = null;
     setLeads((prev) =>
       prev.map((lead) => {
         if (lead.id === id) {
-          return {
+          const updated: Lead = {
             ...lead,
             status,
             paymentStatus: status === 'paid' ? 'paid' : lead.paymentStatus,
           };
+          updatedLead = updated;
+          return updated;
         }
         return lead;
       })
     );
+    if (updatedLead) {
+      saveDocument('leads', updatedLead);
+    }
     logAudit('LEAD_STATUS_UPDATE', 'CRM', `Updated lead ${id} to ${status}`);
   };
 
   const addLeadNote = (leadId: string, text: string) => {
+    let updatedLead: Lead | null = null;
     setLeads((prev) =>
       prev.map((lead) => {
         if (lead.id === leadId) {
@@ -1224,11 +1599,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             addedBy: currentUser?.name || 'Telecaller',
             date: new Date().toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }),
           };
-          return { ...lead, notes: [newNote, ...lead.notes] };
+          const updated = { ...lead, notes: [newNote, ...lead.notes] };
+          updatedLead = updated;
+          return updated;
         }
         return lead;
       })
     );
+    if (updatedLead) {
+      saveDocument('leads', updatedLead);
+    }
   };
 
   const enrollLeadAsStudent = (leadId: string, courseId: string) => {
@@ -1251,27 +1631,44 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
 
     setUsers((prev) => [...prev, newStudent]);
+    saveDocument('users', newStudent);
 
     // Enroll in course
+    let updatedCourse: Course | null = null;
     setCourses((prev) =>
-      prev.map((c) =>
-        c.id === courseId ? { ...c, studentIds: Array.from(new Set([...c.studentIds, newStudentId])) } : c
-      )
+      prev.map((c) => {
+        if (c.id === courseId) {
+          const updated = { ...c, studentIds: Array.from(new Set([...c.studentIds, newStudentId])) };
+          updatedCourse = updated;
+          return updated;
+        }
+        return c;
+      })
     );
+    if (updatedCourse) {
+      saveDocument('courses', updatedCourse);
+    }
 
     // Update lead status
+    let updatedLead: Lead | null = null;
     setLeads((prev) =>
-      prev.map((l) =>
-        l.id === leadId
-          ? {
-              ...l,
-              status: 'enrolled',
-              enrollmentStatus: 'enrolled',
-              paymentStatus: 'paid',
-            }
-          : l
-      )
+      prev.map((l) => {
+        if (l.id === leadId) {
+          const updated: Lead = {
+            ...l,
+            status: 'enrolled',
+            enrollmentStatus: 'enrolled',
+            paymentStatus: 'paid',
+          };
+          updatedLead = updated;
+          return updated;
+        }
+        return l;
+      })
     );
+    if (updatedLead) {
+      saveDocument('leads', updatedLead);
+    }
 
     logAudit('LEAD_CONVERTED', 'CRM', `Converted lead ${lead.name} to Student Account (${newStudent.admissionNumber})`);
   };
@@ -1285,23 +1682,44 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       read: false,
     };
     setNotifications((prev) => [newNotif, ...prev]);
+    saveDocument('notifications', newNotif);
     logAudit('NOTIFICATION_SENT', 'System', `Notification sent to: ${notifData.userId} (${notifData.title})`);
   };
 
   const deleteNotification = (id: string) => {
     setNotifications((prev) => prev.filter((n) => n.id !== id));
+    deleteDocument('notifications', id);
   };
 
   const markNotificationRead = (id: string) => {
-    setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, read: true } : n)));
+    let updatedNotif: Notification | null = null;
+    setNotifications((prev) =>
+      prev.map((n) => {
+        if (n.id === id) {
+          const updated = { ...n, read: true };
+          updatedNotif = updated;
+          return updated;
+        }
+        return n;
+      })
+    );
+    if (updatedNotif) {
+      saveDocument('notifications', updatedNotif);
+    }
   };
 
   const markAllNotificationsRead = () => {
-    setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+    setNotifications((prev) => {
+      const updated = prev.map((n) => ({ ...n, read: true }));
+      updated.forEach((n) => saveDocument('notifications', n));
+      return updated;
+    });
   };
 
   const updateSettings = (updates: Partial<InstitutionSettings>) => {
-    setSettings((prev) => ({ ...prev, ...updates }));
+    const updated = { ...settings, ...updates };
+    setSettings(updated);
+    saveSingletonDocument('settings', 'institution', updated);
     logAudit('SETTINGS_UPDATED', 'Settings', 'Updated institutional configuration and branding');
   };
 
@@ -1373,6 +1791,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setGlobalSearchQuery,
         showFirstLoginModal,
         setShowFirstLoginModal,
+        isDatabaseConnected,
+        isSyncing,
+        lastSyncTime,
+        firebaseProjectId,
+        firestoreDatabaseId,
+        refreshDatabaseSync,
         loginWithCredentials,
         handleGoogleLogin,
         handleLogout,
