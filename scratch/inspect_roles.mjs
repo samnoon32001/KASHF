@@ -15,8 +15,8 @@ if (!connectionString) {
 const sql = neon(connectionString);
 
 async function inspectRoles() {
-  const roles = await sql`SELECT id, name, role_key, description, updated_at FROM roles LIMIT 5;`;
-  console.table(roles);
+  const roles = await sql`SELECT id, name, role_key, description, data, updated_at FROM roles WHERE id = 'role-telecaller';`;
+  console.log(roles);
 }
 
 inspectRoles().catch(console.error);
