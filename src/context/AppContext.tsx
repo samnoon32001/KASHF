@@ -100,7 +100,7 @@ interface AppContextType {
   can: (permission: string) => boolean;
 
   // CRUD & Actions
-  addUser: (userData: Omit<UserProfile, 'id' | 'joiningDate' | 'permissions'> & { permissions?: string[] }) => void;
+  addUser: (userData: Omit<UserProfile, 'id' | 'joiningDate' | 'permissions'> & { id?: string; permissions?: string[] }) => UserProfile;
   updateUser: (id: string, updates: Partial<UserProfile>) => void;
   deleteUser: (id: string) => void;
   toggleUserStatus: (id: string) => void;
@@ -922,10 +922,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   // User management
-  const addUser = (userData: Omit<UserProfile, 'id' | 'joiningDate' | 'permissions'> & { permissions?: string[] }) => {
+  const addUser = (
+    userData: Omit<UserProfile, 'id' | 'joiningDate' | 'permissions'> & { id?: string; permissions?: string[] }
+  ): UserProfile => {
     const newUser: UserProfile = {
       ...userData,
-      id: 'user-' + Date.now(),
+      id: userData.id || 'user-' + Date.now(),
       joiningDate: new Date().toISOString().split('T')[0],
       permissions:
         userData.permissions && userData.permissions.length > 0
@@ -935,6 +937,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setUsers((prev) => [...prev, newUser]);
     saveDocument('users', newUser);
     logAudit('USER_CREATED', 'Users', `Added user ${newUser.name} with role ${newUser.role}`);
+    return newUser;
   };
 
   const updateUser = (id: string, updates: Partial<UserProfile>) => {
