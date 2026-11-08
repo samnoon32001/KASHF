@@ -422,6 +422,228 @@ export async function upsertDocument(collection: string, id: string, data: any):
       );
       break;
 
+    case 'roles':
+      await sql.query(
+        `INSERT INTO roles (id, name, role_key, description, data, updated_at)
+         VALUES ($1, $2, $3, $4, $5::jsonb, NOW())
+         ON CONFLICT (id) DO UPDATE SET
+           name = EXCLUDED.name,
+           role_key = EXCLUDED.role_key,
+           description = EXCLUDED.description,
+           data = EXCLUDED.data,
+           updated_at = NOW();`,
+        [id, name, data.roleKey || null, data.description || null, dataJson]
+      );
+      break;
+
+    case 'subjects':
+      await sql.query(
+        `INSERT INTO subjects (id, code, name, course_id, faculty_id, status, data, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, NOW())
+         ON CONFLICT (id) DO UPDATE SET
+           code = EXCLUDED.code,
+           name = EXCLUDED.name,
+           course_id = EXCLUDED.course_id,
+           faculty_id = EXCLUDED.faculty_id,
+           status = EXCLUDED.status,
+           data = EXCLUDED.data,
+           updated_at = NOW();`,
+        [id, data.code || null, name, data.courseId || null, data.facultyId || null, status || 'active', dataJson]
+      );
+      break;
+
+    case 'attendance':
+      await sql.query(
+        `INSERT INTO attendance (id, class_id, course_name, subject_name, date, total_students, present_count, absent_count, data, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, NOW())
+         ON CONFLICT (id) DO UPDATE SET
+           class_id = EXCLUDED.class_id,
+           course_name = EXCLUDED.course_name,
+           subject_name = EXCLUDED.subject_name,
+           date = EXCLUDED.date,
+           total_students = EXCLUDED.total_students,
+           present_count = EXCLUDED.present_count,
+           absent_count = EXCLUDED.absent_count,
+           data = EXCLUDED.data,
+           updated_at = NOW();`,
+        [
+          id,
+          data.classId || null,
+          data.courseName || null,
+          data.subjectName || null,
+          data.date || null,
+          data.totalStudents || 0,
+          data.presentCount || 0,
+          data.absentCount || 0,
+          dataJson,
+        ]
+      );
+      break;
+
+    case 'recorded_classes':
+      await sql.query(
+        `INSERT INTO recorded_classes (id, title, course_name, subject_name, faculty_name, drive_url, class_date, status, data, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, NOW())
+         ON CONFLICT (id) DO UPDATE SET
+           title = EXCLUDED.title,
+           course_name = EXCLUDED.course_name,
+           subject_name = EXCLUDED.subject_name,
+           faculty_name = EXCLUDED.faculty_name,
+           drive_url = EXCLUDED.drive_url,
+           class_date = EXCLUDED.class_date,
+           status = EXCLUDED.status,
+           data = EXCLUDED.data,
+           updated_at = NOW();`,
+        [
+          id,
+          data.title || null,
+          data.courseName || null,
+          data.subjectName || null,
+          data.facultyName || null,
+          data.driveUrl || null,
+          data.classDate || null,
+          status || 'published',
+          dataJson,
+        ]
+      );
+      break;
+
+    case 'task_submissions':
+      await sql.query(
+        `INSERT INTO task_submissions (id, task_id, student_id, student_name, submitted_at, status, points_awarded, data, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, NOW())
+         ON CONFLICT (id) DO UPDATE SET
+           task_id = EXCLUDED.task_id,
+           student_id = EXCLUDED.student_id,
+           student_name = EXCLUDED.student_name,
+           submitted_at = EXCLUDED.submitted_at,
+           status = EXCLUDED.status,
+           points_awarded = EXCLUDED.points_awarded,
+           data = EXCLUDED.data,
+           updated_at = NOW();`,
+        [
+          id,
+          data.taskId || null,
+          data.studentId || null,
+          data.studentName || null,
+          data.submittedAt || null,
+          status || 'pending',
+          data.pointsAwarded || 0,
+          dataJson,
+        ]
+      );
+      break;
+
+    case 'creative_tasks':
+      await sql.query(
+        `INSERT INTO creative_tasks (id, title, type, priority, assigned_to, deadline, status, data, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, NOW())
+         ON CONFLICT (id) DO UPDATE SET
+           title = EXCLUDED.title,
+           type = EXCLUDED.type,
+           priority = EXCLUDED.priority,
+           assigned_to = EXCLUDED.assigned_to,
+           deadline = EXCLUDED.deadline,
+           status = EXCLUDED.status,
+           data = EXCLUDED.data,
+           updated_at = NOW();`,
+        [
+          id,
+          data.title || null,
+          data.type || null,
+          data.priority || 'medium',
+          data.assignedTo || null,
+          data.deadline || null,
+          status || 'new',
+          dataJson,
+        ]
+      );
+      break;
+
+    case 'media':
+      await sql.query(
+        `INSERT INTO media (id, name, category, url, uploaded_by, data, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6::jsonb, NOW())
+         ON CONFLICT (id) DO UPDATE SET
+           name = EXCLUDED.name,
+           category = EXCLUDED.category,
+           url = EXCLUDED.url,
+           uploaded_by = EXCLUDED.uploaded_by,
+           data = EXCLUDED.data,
+           updated_at = NOW();`,
+        [id, name, data.category || null, data.url || null, data.uploadedBy || null, dataJson]
+      );
+      break;
+
+    case 'notifications':
+      await sql.query(
+        `INSERT INTO notifications (id, user_id, title, message, type, read, created_at, data, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, NOW())
+         ON CONFLICT (id) DO UPDATE SET
+           user_id = EXCLUDED.user_id,
+           title = EXCLUDED.title,
+           message = EXCLUDED.message,
+           type = EXCLUDED.type,
+           read = EXCLUDED.read,
+           created_at = EXCLUDED.created_at,
+           data = EXCLUDED.data,
+           updated_at = NOW();`,
+        [
+          id,
+          data.userId || 'all',
+          data.title || null,
+          data.message || null,
+          data.type || 'system',
+          data.read ?? false,
+          data.createdAt || null,
+          dataJson,
+        ]
+      );
+      break;
+
+    case 'audit_logs':
+      await sql.query(
+        `INSERT INTO audit_logs (id, user_id, user_name, user_role, action, module, details, timestamp, data, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, NOW())
+         ON CONFLICT (id) DO UPDATE SET
+           user_id = EXCLUDED.user_id,
+           user_name = EXCLUDED.user_name,
+           user_role = EXCLUDED.user_role,
+           action = EXCLUDED.action,
+           module = EXCLUDED.module,
+           details = EXCLUDED.details,
+           timestamp = EXCLUDED.timestamp,
+           data = EXCLUDED.data,
+           updated_at = NOW();`,
+        [
+          id,
+          data.userId || null,
+          data.userName || null,
+          data.userRole || null,
+          data.action || null,
+          data.module || null,
+          data.details || null,
+          data.timestamp || null,
+          dataJson,
+        ]
+      );
+      break;
+
+    case 'points_history':
+      await sql.query(
+        `INSERT INTO points_history (id, student_id, points, reason, date, data, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6::jsonb, NOW())
+         ON CONFLICT (id) DO UPDATE SET
+           student_id = EXCLUDED.student_id,
+           points = EXCLUDED.points,
+           reason = EXCLUDED.reason,
+           date = EXCLUDED.date,
+           data = EXCLUDED.data,
+           updated_at = NOW();`,
+        [id, data.studentId || null, data.points || 0, data.reason || null, data.date || null, dataJson]
+      );
+      break;
+
     default:
       // Generic individual table upsert with id and data
       await sql.query(
