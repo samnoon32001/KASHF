@@ -1,3 +1,5 @@
+'use client';
+
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
 import {
@@ -19,7 +21,7 @@ import {
   InstitutionSettings,
   StudentPointsHistory,
 } from '../types';
-import { auth, loginWithGoogle, logoutUser, testFirestoreConnection, firebaseConfig } from '../firebase';
+import { auth, loginWithGoogle, logoutUser, firebaseConfig } from '../firebase';
 import {
   subscribeToCollection,
   subscribeToDocument,
@@ -29,7 +31,8 @@ import {
   saveSingletonDocument,
   isCollectionSeeded,
   markCollectionSeeded,
-} from '../services/firestoreSync';
+  testNeonConnection,
+} from '../services/neonSync';
 import { ALL_PERMISSIONS, DEFAULT_ROLE_DEFINITIONS, hasPermission } from '../data/permissions';
 import {
   INITIAL_SETTINGS,
@@ -76,12 +79,16 @@ interface AppContextType {
   showFirstLoginModal: boolean;
   setShowFirstLoginModal: (show: boolean) => void;
 
-  // Cloud Database Connection State
+  // Cloud Database Connection State (Neon PostgreSQL)
   isDatabaseConnected: boolean;
   isSyncing: boolean;
   lastSyncTime: Date | null;
   firebaseProjectId: string;
   firestoreDatabaseId: string;
+  neonHost: string;
+  neonDatabase: string;
+  neonRegion: string;
+  neonLatency: number | null;
   refreshDatabaseSync: () => Promise<void>;
 
   // Auth & Roles
@@ -93,7 +100,7 @@ interface AppContextType {
   can: (permission: string) => boolean;
 
   // CRUD & Actions
-  addUser: (userData: Omit<UserProfile, 'id' | 'joiningDate'>) => void;
+  addUser: (userData: Omit<UserProfile, 'id' | 'joiningDate' | 'permissions'> & { permissions?: string[] }) => void;
   updateUser: (id: string, updates: Partial<UserProfile>) => void;
   deleteUser: (id: string) => void;
   toggleUserStatus: (id: string) => void;
@@ -105,6 +112,8 @@ interface AppContextType {
   addCourse: (course: Omit<Course, 'id'>) => void;
   updateCourse: (id: string, updates: Partial<Course>) => void;
   deleteCourse: (id: string) => void;
+  enrollStudentsInCourse: (courseId: string, studentIds: string[]) => void;
+  removeStudentFromCourse: (courseId: string, studentId: string) => void;
 
   addSubject: (subject: Omit<Subject, 'id'>) => void;
   updateSubject: (id: string, updates: Partial<Subject>) => void;
@@ -161,12 +170,12 @@ interface AppContextType {
 
 const AppContext = createContext<AppContextType | null>(null);
 
-// Initial default super admin account as defined in Section 38
-const INITIAL_SUPER_ADMIN: UserProfile = {
+// Initial default super admin account
+export const INITIAL_SUPER_ADMIN: UserProfile = {
   id: 'user-super-admin',
   name: 'Super Administrator',
   username: 'admin',
-  password: 'password123',
+  password: 'KashfAdmin@2026#Secure',
   email: 'admin@institution.local',
   role: 'super_admin',
   department: 'Executive Operations',
@@ -177,116 +186,10 @@ const INITIAL_SUPER_ADMIN: UserProfile = {
   isFirstLogin: false,
 };
 
-// Realistic baseline mock accounts for quick preview switching
+// Initial user directory contains ONLY the Super Administrator.
+// All other users (faculty, students, coordinators) are created by Super Admin.
 const INITIAL_USERS: UserProfile[] = [
   INITIAL_SUPER_ADMIN,
-  {
-    id: 'user-director-1',
-    name: 'Dr. Arthur Williams',
-    username: 'director',
-    password: 'password123',
-    email: 'director@institution.local',
-    role: 'director',
-    department: 'Executive Leadership',
-    status: 'active',
-    phone: '+1 (555) 203-4921',
-    permissions: DEFAULT_ROLE_DEFINITIONS.find((r) => r.roleKey === 'director')?.permissions || [],
-    joiningDate: '2026-01-10',
-  },
-  {
-    id: 'user-academic-1',
-    name: 'Prof. Margaret Vance',
-    username: 'academic',
-    password: 'password123',
-    email: 'academic@institution.local',
-    role: 'academic_coordinator',
-    department: 'Academic Affairs',
-    status: 'active',
-    phone: '+1 (555) 392-1194',
-    permissions: DEFAULT_ROLE_DEFINITIONS.find((r) => r.roleKey === 'academic_coordinator')?.permissions || [],
-    joiningDate: '2026-01-15',
-  },
-  {
-    id: 'user-faculty-1',
-    name: 'Dr. Sarah Jenkins',
-    username: 'faculty',
-    password: 'password123',
-    email: 'sarah.jenkins@institution.local',
-    role: 'faculty',
-    department: 'Computer Science',
-    status: 'active',
-    phone: '+1 (555) 837-2911',
-    permissions: DEFAULT_ROLE_DEFINITIONS.find((r) => r.roleKey === 'faculty')?.permissions || [],
-    joiningDate: '2026-01-20',
-  },
-  {
-    id: 'user-creative-1',
-    name: 'Marcus Vance',
-    username: 'creative',
-    password: 'password123',
-    email: 'creative@institution.local',
-    role: 'creative_head',
-    department: 'Media & Branding',
-    status: 'active',
-    phone: '+1 (555) 441-9923',
-    permissions: DEFAULT_ROLE_DEFINITIONS.find((r) => r.roleKey === 'creative_head')?.permissions || [],
-    joiningDate: '2026-02-01',
-  },
-  {
-    id: 'user-telecaller-1',
-    name: 'Elena Rostova',
-    username: 'telecaller',
-    password: 'password123',
-    email: 'elena.crm@institution.local',
-    role: 'telecaller',
-    department: 'Admissions & CRM',
-    status: 'active',
-    phone: '+1 (555) 918-3341',
-    permissions: DEFAULT_ROLE_DEFINITIONS.find((r) => r.roleKey === 'telecaller')?.permissions || [],
-    joiningDate: '2026-02-05',
-  },
-  {
-    id: 'user-student-1',
-    name: 'Aiden Brooks',
-    username: 'student',
-    password: 'password123',
-    email: 'aiden.student@institution.local',
-    role: 'student',
-    department: 'Computer Science',
-    status: 'active',
-    phone: '+1 (555) 604-1823',
-    admissionNumber: 'ADM-2026-001',
-    permissions: DEFAULT_ROLE_DEFINITIONS.find((r) => r.roleKey === 'student')?.permissions || [],
-    joiningDate: '2026-02-10',
-  },
-  {
-    id: 'user-student-2',
-    name: 'Maya Lin',
-    username: 'maya',
-    password: 'password123',
-    email: 'maya.student@institution.local',
-    role: 'student',
-    department: 'Computer Science',
-    status: 'active',
-    phone: '+1 (555) 604-1824',
-    admissionNumber: 'ADM-2026-002',
-    permissions: DEFAULT_ROLE_DEFINITIONS.find((r) => r.roleKey === 'student')?.permissions || [],
-    joiningDate: '2026-02-10',
-  },
-  {
-    id: 'user-student-3',
-    name: 'Carlos Mendez',
-    username: 'carlos',
-    password: 'password123',
-    email: 'carlos.student@institution.local',
-    role: 'student',
-    department: 'Computer Science',
-    status: 'active',
-    phone: '+1 (555) 604-1825',
-    admissionNumber: 'ADM-2026-003',
-    permissions: DEFAULT_ROLE_DEFINITIONS.find((r) => r.roleKey === 'student')?.permissions || [],
-    joiningDate: '2026-02-11',
-  },
 ];
 
 const INITIAL_NOTIFICATIONS: Notification[] = [
@@ -340,7 +243,52 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [users, setUsers] = useState<UserProfile[]>(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY + '_users');
-      return saved ? JSON.parse(saved) : INITIAL_USERS;
+      if (saved) {
+        const parsed: UserProfile[] = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          // Remove legacy hardcoded mock dummy accounts
+          const mockIds = new Set([
+            'user-director-1',
+            'user-academic-1',
+            'user-faculty-1',
+            'user-creative-1',
+            'user-telecaller-1',
+            'user-student-1',
+            'user-student-2',
+            'user-student-3',
+          ]);
+
+          let cleaned = parsed.filter((u) => !mockIds.has(u.id));
+
+          // Ensure Super Admin exists and has updated secure password
+          const adminIdx = cleaned.findIndex(
+            (u) =>
+              u.role === 'super_admin' ||
+              u.id === 'user-super-admin' ||
+              u.username === 'admin' ||
+              u.email.toLowerCase() === 'admin@institution.local'
+          );
+
+          if (adminIdx !== -1) {
+            if (
+              !cleaned[adminIdx].password ||
+              cleaned[adminIdx].password === 'password123' ||
+              cleaned[adminIdx].password === 'admin123' ||
+              cleaned[adminIdx].password === 'ChangeMe@2026!'
+            ) {
+              cleaned[adminIdx] = {
+                ...cleaned[adminIdx],
+                username: cleaned[adminIdx].username || 'admin',
+                password: INITIAL_SUPER_ADMIN.password,
+              };
+            }
+          } else {
+            cleaned = [INITIAL_SUPER_ADMIN, ...cleaned];
+          }
+          return cleaned;
+        }
+      }
+      return INITIAL_USERS;
     } catch {
       return INITIAL_USERS;
     }
@@ -348,12 +296,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(() => {
     try {
-      const saved = localStorage.getItem(STORAGE_KEY + '_active_user');
-      if (saved) return JSON.parse(saved);
+      const savedLocal = localStorage.getItem(STORAGE_KEY + '_active_user');
+      if (savedLocal) return JSON.parse(savedLocal);
+      const savedSession = sessionStorage.getItem(STORAGE_KEY + '_active_user');
+      if (savedSession) return JSON.parse(savedSession);
     } catch {
       // ignore
     }
-    return INITIAL_SUPER_ADMIN;
+    return null; // Secured: User must explicitly log in!
   });
 
   const [roles, setRoles] = useState<RoleDefinition[]>(() => {
@@ -512,40 +462,46 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [globalSearchQuery, setGlobalSearchQuery] = useState<string>('');
   const [showFirstLoginModal, setShowFirstLoginModal] = useState<boolean>(false);
 
-  // Cloud Database Connection State
+  // Cloud Database Connection State (Neon PostgreSQL)
   const [isDatabaseConnected, setIsDatabaseConnected] = useState<boolean>(false);
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
   const [lastSyncTime, setLastSyncTime] = useState<Date | null>(null);
+  const [neonHost] = useState<string>('ep-polished-dawn-azf4nchi-pooler.c-3.ap-southeast-1.aws.neon.tech');
+  const [neonDatabase] = useState<string>('neondb');
+  const [neonRegion] = useState<string>('AWS ap-southeast-1 (Singapore)');
+  const [neonLatency, setNeonLatency] = useState<number | null>(null);
 
-  const firebaseProjectId = firebaseConfig.projectId;
-  const firestoreDatabaseId = firebaseConfig.firestoreDatabaseId;
+  const firebaseProjectId = neonHost;
+  const firestoreDatabaseId = neonDatabase;
 
   const refreshDatabaseSync = async () => {
     setIsSyncing(true);
     try {
-      await testFirestoreConnection();
-      setIsDatabaseConnected(true);
+      const ping = await testNeonConnection();
+      setIsDatabaseConnected(ping.connected);
+      if (ping.latency) setNeonLatency(ping.latency);
       setLastSyncTime(new Date());
     } catch (e) {
-      console.warn('Database ping failed:', e);
+      console.warn('Neon database ping failed:', e);
       setIsDatabaseConnected(false);
     } finally {
       setIsSyncing(false);
     }
   };
 
-  // Real-Time Cloud Firestore Sync & Seeding across all browsers and devices
+  // Real-Time Neon PostgreSQL Sync & Seeding across all browsers and devices
   useEffect(() => {
     let unsubs: (() => void)[] = [];
 
-    const initFirestoreSync = async () => {
+    const initNeonSync = async () => {
       try {
         setIsSyncing(true);
-        await testFirestoreConnection();
-        setIsDatabaseConnected(true);
+        const ping = await testNeonConnection();
+        setIsDatabaseConnected(ping.connected);
+        if (ping.latency) setNeonLatency(ping.latency);
         setLastSyncTime(new Date());
 
-        // 1. Seed initial data to Cloud Firestore if collection has never been initialized
+        // 1. Seed initial data to Neon PostgreSQL if collection has never been initialized
         await Promise.all([
           seedIfEmpty('users', users),
           seedIfEmpty('roles', roles),
@@ -574,7 +530,48 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         unsubs.push(
           subscribeToCollection<UserProfile>('users', (data) => {
             if (data && data.length > 0) {
-              setUsers(data);
+              const mockIds = new Set([
+                'user-director-1',
+                'user-academic-1',
+                'user-faculty-1',
+                'user-creative-1',
+                'user-telecaller-1',
+                'user-student-1',
+                'user-student-2',
+                'user-student-3',
+              ]);
+              const filtered = data.filter((u) => !mockIds.has(u.id));
+              // Asynchronously clean mock records if present in Firestore
+              data.forEach((u) => {
+                if (mockIds.has(u.id)) {
+                  deleteDocument('users', u.id).catch(() => {});
+                }
+              });
+
+              // Ensure super admin has secure password
+              const admin = filtered.find(
+                (u) =>
+                  u.role === 'super_admin' ||
+                  u.id === 'user-super-admin' ||
+                  u.username === 'admin' ||
+                  u.email.toLowerCase() === 'admin@institution.local'
+              );
+              if (
+                admin &&
+                (!admin.password ||
+                  admin.password === 'password123' ||
+                  admin.password === 'admin123' ||
+                  admin.password === 'ChangeMe@2026!')
+              ) {
+                const updatedAdmin = {
+                  ...admin,
+                  username: admin.username || 'admin',
+                  password: INITIAL_SUPER_ADMIN.password,
+                };
+                saveDocument('users', updatedAdmin).catch(() => {});
+              }
+
+              setUsers(filtered.length > 0 ? filtered : [INITIAL_SUPER_ADMIN]);
               setLastSyncTime(new Date());
             }
           }),
@@ -649,14 +646,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           })
         );
       } catch (err) {
-        console.error('[Firestore Connection / Subscription Error]:', err);
+        console.error('[Neon PostgreSQL Connection / Subscription Error]:', err);
         setIsDatabaseConnected(false);
       } finally {
         setIsSyncing(false);
       }
     };
 
-    initFirestoreSync();
+    initNeonSync();
 
     return () => {
       unsubs.forEach((unsub) => unsub());
@@ -684,6 +681,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       localStorage.setItem(STORAGE_KEY + '_points', JSON.stringify(pointsHistory));
       if (currentUser) {
         localStorage.setItem(STORAGE_KEY + '_active_user', JSON.stringify(currentUser));
+      } else {
+        localStorage.removeItem(STORAGE_KEY + '_active_user');
+        sessionStorage.removeItem(STORAGE_KEY + '_active_user');
       }
     } catch (e) {
       console.warn('Storage sync failed', e);
@@ -708,46 +708,36 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     currentUser,
   ]);
 
-  // Firebase Auth state listener
+  // Firebase Auth state listener - Only authorize users created by Super Admin
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       setFirebaseUser(user);
-      if (user) {
-        // Find or create profile
+      if (user && user.email) {
         setUsers((prevUsers) => {
-          let existing = prevUsers.find((u) => u.email.toLowerCase() === user.email?.toLowerCase());
-          const isAdminUser = user.email?.toLowerCase() === 'ashiq5023@gmail.com' || user.email?.toLowerCase() === 'admin@institution.local';
-          const defaultRole: UserRole = isAdminUser ? 'super_admin' : 'student';
+          const userEmail = user.email!.toLowerCase();
+          const existing = prevUsers.find((u) => u.email.toLowerCase() === userEmail);
 
           if (!existing) {
-            existing = {
-              id: user.uid,
-              name: user.displayName || user.email?.split('@')[0] || 'Institution User',
-              email: user.email || '',
-              role: defaultRole,
-              status: 'active',
-              photoUrl: user.photoURL || undefined,
-              permissions:
-                defaultRole === 'super_admin'
-                  ? ALL_PERMISSIONS.map((p) => p.id)
-                  : DEFAULT_ROLE_DEFINITIONS.find((r) => r.roleKey === defaultRole)?.permissions || [],
-              joiningDate: new Date().toISOString().split('T')[0],
-              lastLogin: new Date().toISOString(),
-            };
-            setCurrentUser(existing);
-            saveDocument('users', existing);
-            return [...prevUsers, existing];
-          } else {
-            // Update last login
-            const updated = {
-              ...existing,
-              lastLogin: new Date().toISOString(),
-              photoUrl: user.photoURL || existing.photoUrl,
-            };
-            setCurrentUser(updated);
-            saveDocument('users', updated);
-            return prevUsers.map((u) => (u.id === existing!.id ? updated : u));
+            console.warn(`[Auth] Blocked unauthorized login for: ${userEmail}. Account must be created by Super Admin.`);
+            logoutUser().catch(() => {});
+            return prevUsers;
           }
+
+          if (existing.status === 'inactive') {
+            console.warn(`[Auth] Blocked deactivated user: ${userEmail}`);
+            logoutUser().catch(() => {});
+            return prevUsers;
+          }
+
+          // User was created by Super Admin and is active
+          const updated = {
+            ...existing,
+            lastLogin: new Date().toISOString(),
+            photoUrl: user.photoURL || existing.photoUrl,
+          };
+          setCurrentUser(updated);
+          saveDocument('users', updated).catch(() => {});
+          return prevUsers.map((u) => (u.id === existing.id ? updated : u));
         });
       }
       setAuthLoading(false);
@@ -818,7 +808,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   }, [settings.appName, settings.institutionName, settings.faviconUrl]);
 
-  // Authentication methods
+  // Authentication methods - Strict credentials check, no backdoors
   const loginWithCredentials = async (identifier: string, pass: string, rememberMe = true): Promise<boolean> => {
     const cleanId = identifier.trim().toLowerCase();
 
@@ -829,54 +819,49 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         (u.email && u.email.toLowerCase() === cleanId)
     );
 
-    if (matched) {
-      if (matched.status === 'inactive') {
-        throw new Error('Account has been deactivated. Please contact Super Admin.');
-      }
-
-      const expectedPass = matched.password || 'password123';
-      const isPassValid =
-        pass === expectedPass ||
-        pass === 'admin123' ||
-        pass === 'ChangeMe@2026!' ||
-        pass === 'password123' ||
-        pass === `${matched.role}123`;
-
-      if (!isPassValid) {
-        throw new Error('Invalid username/email or password.');
-      }
-
-      setCurrentUser(matched);
-      if (rememberMe) {
-        try {
-          localStorage.setItem(STORAGE_KEY + '_saved_creds', JSON.stringify({ identifier, password: pass }));
-        } catch {
-          // ignore
-        }
-      } else {
-        try {
-          localStorage.removeItem(STORAGE_KEY + '_saved_creds');
-        } catch {
-          // ignore
-        }
-      }
-
-      logAudit('LOGIN_SUCCESS', 'Auth', `User logged in: ${matched.name} (${matched.role})`);
-      if (matched.isFirstLogin) {
-        setShowFirstLoginModal(true);
-      }
-      return true;
+    if (!matched) {
+      logAudit('LOGIN_FAILED', 'Auth', `Failed login attempt for unknown user: ${cleanId}`);
+      throw new Error('Invalid username/email or password.');
     }
 
-    // Default admin fallback
-    if ((cleanId === 'admin' || cleanId === 'admin@institution.local') && (pass === 'admin123' || pass === 'ChangeMe@2026!')) {
-      const admin = users.find((u) => u.email.toLowerCase() === 'admin@institution.local') || INITIAL_SUPER_ADMIN;
-      setCurrentUser(admin);
-      logAudit('LOGIN_SUCCESS', 'Auth', 'Super Admin credential login');
-      return true;
+    if (matched.status === 'inactive') {
+      logAudit('LOGIN_BLOCKED', 'Auth', `Deactivated account login attempt: ${matched.email}`);
+      throw new Error('This account has been deactivated. Please contact the Super Administrator.');
     }
 
-    throw new Error('Invalid username/email or password.');
+    // Strict password match ONLY - absolutely no backdoors or default fallbacks
+    const expectedPass = matched.password;
+    if (!expectedPass || pass !== expectedPass) {
+      logAudit('LOGIN_FAILED', 'Auth', `Invalid password attempt for ${matched.name} (${cleanId})`);
+      throw new Error('Invalid username/email or password.');
+    }
+
+    const updated = {
+      ...matched,
+      lastLogin: new Date().toISOString(),
+    };
+
+    setCurrentUser(updated);
+    setUsers((prev) => prev.map((u) => (u.id === matched.id ? updated : u)));
+    try {
+      saveDocument('users', updated);
+    } catch {}
+
+    if (rememberMe) {
+      try {
+        localStorage.setItem(STORAGE_KEY + '_active_user', JSON.stringify(updated));
+      } catch {}
+    } else {
+      try {
+        sessionStorage.setItem(STORAGE_KEY + '_active_user', JSON.stringify(updated));
+      } catch {}
+    }
+
+    logAudit('LOGIN_SUCCESS', 'Auth', `User logged in: ${matched.name} (${matched.role})`);
+    if (matched.isFirstLogin) {
+      setShowFirstLoginModal(true);
+    }
+    return true;
   };
 
   const handleGoogleLogin = async () => {
@@ -892,8 +877,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const handleLogout = async () => {
-    logAudit('LOGOUT', 'Auth', `User logged out: ${currentUser?.email}`);
-    await logoutUser();
+    const userIdentifier = currentUser?.email || currentUser?.username || 'User';
+    logAudit('LOGOUT', 'Auth', `User logged out: ${userIdentifier}`);
+    try {
+      localStorage.removeItem(STORAGE_KEY + '_active_user');
+      sessionStorage.removeItem(STORAGE_KEY + '_active_user');
+      localStorage.removeItem('kashf_saved_password');
+    } catch (e) {
+      console.warn('Storage cleanup failed on logout', e);
+    }
+    try {
+      await logoutUser();
+    } catch (e) {
+      console.warn('Firebase logout failed', e);
+    }
     setCurrentUser(null);
     setActiveTab('dashboard');
   };
@@ -902,25 +899,30 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (!currentUser) return;
     const updated = {
       ...currentUser,
+      password: newPassword,
       isFirstLogin: false,
     };
     setCurrentUser(updated);
     setUsers((prev) => prev.map((u) => (u.id === currentUser.id ? updated : u)));
+    try {
+      saveDocument('users', updated);
+    } catch {}
     setShowFirstLoginModal(false);
-    logAudit('PASSWORD_CHANGED', 'Auth', 'Super Admin updated initial setup password');
+    logAudit('PASSWORD_CHANGED', 'Auth', `${currentUser.name} updated account password`);
   };
 
   const switchRolePreview = (role: UserRole) => {
+    if (currentUser?.role !== 'super_admin') return;
     const matchedUser = users.find((u) => u.role === role);
     if (matchedUser) {
       setCurrentUser(matchedUser);
       setActiveTab('dashboard');
-      logAudit('ROLE_SWITCH', 'Preview', `Switched active preview role to: ${role}`);
+      logAudit('ROLE_SWITCH', 'Preview', `Super Admin switched active preview role to: ${role}`);
     }
   };
 
   // User management
-  const addUser = (userData: Omit<UserProfile, 'id' | 'joiningDate'>) => {
+  const addUser = (userData: Omit<UserProfile, 'id' | 'joiningDate' | 'permissions'> & { permissions?: string[] }) => {
     const newUser: UserProfile = {
       ...userData,
       id: 'user-' + Date.now(),
@@ -970,7 +972,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setUsers((prev) =>
       prev.map((u) => {
         if (u.id === id) {
-          const nextStatus = u.status === 'active' ? 'inactive' : 'active';
+          const nextStatus: 'active' | 'inactive' = u.status === 'active' ? 'inactive' : 'active';
           logAudit('USER_STATUS_TOGGLE', 'Users', `${u.name} status changed to ${nextStatus}`);
           const updated = { ...u, status: nextStatus };
           updatedUser = updated;
@@ -1058,6 +1060,48 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setCourses((prev) => prev.filter((c) => c.id !== id));
     deleteDocument('courses', id);
     logAudit('COURSE_DELETED', 'Academics', `Deleted course ID: ${id}`);
+  };
+
+  const enrollStudentsInCourse = (courseId: string, studentIdsToAdd: string[]) => {
+    let targetCourseName = '';
+    setCourses((prev) =>
+      prev.map((c) => {
+        if (c.id === courseId) {
+          targetCourseName = c.name;
+          const merged = Array.from(new Set([...c.studentIds, ...studentIdsToAdd]));
+          const updated = { ...c, studentIds: merged };
+          saveDocument('courses', updated);
+          return updated;
+        }
+        return c;
+      })
+    );
+    logAudit(
+      'STUDENTS_ENROLLED',
+      'Academics',
+      `Enrolled ${studentIdsToAdd.length} student(s) into course ${targetCourseName || courseId}`
+    );
+  };
+
+  const removeStudentFromCourse = (courseId: string, studentIdToRemove: string) => {
+    let targetCourseName = '';
+    setCourses((prev) =>
+      prev.map((c) => {
+        if (c.id === courseId) {
+          targetCourseName = c.name;
+          const filtered = c.studentIds.filter((id) => id !== studentIdToRemove);
+          const updated = { ...c, studentIds: filtered };
+          saveDocument('courses', updated);
+          return updated;
+        }
+        return c;
+      })
+    );
+    logAudit(
+      'STUDENT_UNENROLLED',
+      'Academics',
+      `Removed student ID ${studentIdToRemove} from course ${targetCourseName || courseId}`
+    );
   };
 
   // Subject management
@@ -1807,6 +1851,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         lastSyncTime,
         firebaseProjectId,
         firestoreDatabaseId,
+        neonHost,
+        neonDatabase,
+        neonRegion,
+        neonLatency,
         refreshDatabaseSync,
         loginWithCredentials,
         handleGoogleLogin,
@@ -1824,6 +1872,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         addCourse,
         updateCourse,
         deleteCourse,
+        enrollStudentsInCourse,
+        removeStudentFromCourse,
         addSubject,
         updateSubject,
         deleteSubject,

@@ -1,3 +1,5 @@
+'use client';
+
 import React, { useState } from 'react';
 import {
   ClipboardCheck,
@@ -91,6 +93,7 @@ export const AttendanceView: React.FC = () => {
       subjectId: selectedClass.subjectId,
       courseName: selectedClass.courseName,
       subjectName: selectedClass.subjectName,
+      facultyId: selectedClass.facultyId || currentUser?.id || 'faculty-1',
       facultyName: selectedClass.facultyName,
       date: selectedClass.date,
       takenBy: currentUser?.id || 'faculty-1',
@@ -165,8 +168,9 @@ export const AttendanceView: React.FC = () => {
       ? Math.round(studentReports.reduce((sum, s) => sum + s.percentage, 0) / studentReports.length)
       : 88;
 
-  const handleSendWarning = (studentName: string) => {
+  const handleSendWarning = (studentName: string, studentId: string = 'all') => {
     addNotification({
+      userId: studentId,
       title: `Low Attendance Alert: ${studentName}`,
       message: `Student ${studentName} is below the 75% attendance threshold. Please review academic status.`,
       type: 'warning',
@@ -646,7 +650,7 @@ export const AttendanceView: React.FC = () => {
                       <td className="px-5 py-4 text-right">
                         {r.isAtRisk && (
                           <button
-                            onClick={() => handleSendWarning(r.student.name)}
+                            onClick={() => handleSendWarning(r.student.name, r.student.id)}
                             className="inline-flex items-center gap-1 rounded-lg border border-rose-200 bg-rose-50 px-2.5 py-1 text-[11px] font-bold text-rose-700 hover:bg-rose-100 transition cursor-pointer"
                           >
                             <Bell className="w-3 h-3" />

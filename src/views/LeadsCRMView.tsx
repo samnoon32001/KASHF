@@ -1,3 +1,5 @@
+'use client';
+
 import React, { useState, useEffect } from 'react';
 import {
   UserCheck,
@@ -59,7 +61,7 @@ export const LeadsCRMView: React.FC = () => {
   const [formPhone, setFormPhone] = useState('');
   const [formEmail, setFormEmail] = useState('');
   const [formCourse, setFormCourse] = useState('Full-Stack Software Engineering');
-  const [formSource, setFormSource] = useState('Meta Lead Ads');
+  const [formSource, setFormSource] = useState<Lead['source']>('Meta Lead Ads');
   const [formCampaign, setFormCampaign] = useState('Fall Tech Careers Campaign 2026');
 
   const telecallers = users.filter((u) => u.role === 'telecaller');
@@ -193,7 +195,7 @@ export const LeadsCRMView: React.FC = () => {
               phone: '+1 (555) 203-8849',
               email: 'taylor.b@example.com',
               courseInterested: 'Full-Stack Software Engineering',
-              source: 'Meta Lead Ads',
+              source: 'Meta Lead Ads' as const,
               campaign: 'Fall Tech Careers Campaign 2026',
               adName: 'Build High-Income Software Careers',
               status: 'new' as const,
@@ -528,7 +530,7 @@ export const LeadsCRMView: React.FC = () => {
                   <input
                     type="text"
                     value={formSource}
-                    onChange={(e) => setFormSource(e.target.value)}
+                    onChange={(e) => setFormSource(e.target.value as Lead['source'])}
                     placeholder="e.g. Walk-in / Phone"
                     className="w-full h-10 rounded-xl border border-slate-200 px-3.5 text-xs outline-none focus:border-[#117B78]"
                   />

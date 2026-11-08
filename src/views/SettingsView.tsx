@@ -1,3 +1,5 @@
+'use client';
+
 import React, { useState, useMemo } from 'react';
 import {
   ShieldCheck,
@@ -37,7 +39,7 @@ import { useApp } from '../context/AppContext';
 import { UserRole, RoleDefinition, UserProfile } from '../types';
 import { ALL_PERMISSIONS, ROLE_DEFAULT_PERMISSIONS, DEFAULT_ROLE_DEFINITIONS, PermissionItem } from '../data/permissions';
 
-export const SettingsView: React.FC<{ initialTab?: 'general' | 'roles' | 'database' | 'integrations' | 'notifications' }> = ({ initialTab = 'general' }) => {
+export const SettingsView: React.FC<{ initialTab?: 'general' | 'roles' | 'database' | 'integrations' | 'notifications' | 'security' }> = ({ initialTab = 'general' }) => {
   const {
     currentUser,
     activeRole,
@@ -55,6 +57,10 @@ export const SettingsView: React.FC<{ initialTab?: 'general' | 'roles' | 'databa
     lastSyncTime,
     firebaseProjectId,
     firestoreDatabaseId,
+    neonHost,
+    neonDatabase,
+    neonRegion,
+    neonLatency,
     refreshDatabaseSync,
     courses,
     subjects,
@@ -72,7 +78,7 @@ export const SettingsView: React.FC<{ initialTab?: 'general' | 'roles' | 'databa
     logAudit,
   } = useApp();
 
-  const [activeTab, setActiveTab] = useState<'general' | 'roles' | 'database' | 'integrations' | 'notifications'>(initialTab);
+  const [activeTab, setActiveTab] = useState<'general' | 'roles' | 'database' | 'integrations' | 'notifications' | 'security'>(initialTab);
 
   // Institution profile & branding form state
   const [appName, setAppName] = useState(settings.appName || 'Kashf Institute of Islamic Excellence');
@@ -118,7 +124,7 @@ export const SettingsView: React.FC<{ initialTab?: 'general' | 'roles' | 'databa
   };
 
   const [geminiApiKey, setGeminiApiKey] = useState(
-    () => localStorage.getItem('kashf_gemini_api_key') || ''
+    () => (typeof window !== 'undefined' ? localStorage.getItem('kashf_gemini_api_key') || '' : '')
   );
   const [showGeminiKey, setShowGeminiKey] = useState(false);
   const [geminiSaved, setGeminiSaved] = useState(false);
@@ -127,6 +133,41 @@ export const SettingsView: React.FC<{ initialTab?: 'general' | 'roles' | 'databa
     localStorage.setItem('kashf_gemini_api_key', geminiApiKey);
     setGeminiSaved(true);
     setTimeout(() => setGeminiSaved(false), 2500);
+  };
+
+  // Security Tab State
+  const [currentAdminPassword, setCurrentAdminPassword] = useState('');
+  const [newAdminPassword, setNewAdminPassword] = useState('');
+  const [confirmAdminPassword, setConfirmAdminPassword] = useState('');
+  const [passwordChangeError, setPasswordChangeError] = useState('');
+  const [passwordChangeSuccess, setPasswordChangeSuccess] = useState('');
+  const [showAdminPassFields, setShowAdminPassFields] = useState(false);
+
+  const handleUpdateAdminPassword = (e: React.FormEvent) => {
+    e.preventDefault();
+    setPasswordChangeError('');
+    setPasswordChangeSuccess('');
+
+    if (!currentUser) return;
+    if (newAdminPassword.length < 8) {
+      setPasswordChangeError('New password must be at least 8 characters long.');
+      return;
+    }
+    if (newAdminPassword !== confirmAdminPassword) {
+      setPasswordChangeError('New password and confirmation do not match.');
+      return;
+    }
+    if (currentUser.password && currentAdminPassword !== currentUser.password) {
+      setPasswordChangeError('Current password is incorrect.');
+      return;
+    }
+
+    updateUser(currentUser.id, { password: newAdminPassword });
+    setPasswordChangeSuccess('Super Admin password successfully updated!');
+    setCurrentAdminPassword('');
+    setNewAdminPassword('');
+    setConfirmAdminPassword('');
+    setTimeout(() => setPasswordChangeSuccess(''), 4000);
   };
 
   const showNotification = (msg: string) => {
@@ -147,7 +188,7 @@ export const SettingsView: React.FC<{ initialTab?: 'general' | 'roles' | 'databa
       contactPhone,
       address,
     });
-    showNotification('Institutional profile and branding updated and saved to Cloud Firestore.');
+    showNotification('Institutional profile and branding updated and saved to Neon PostgreSQL.');
   };
 
   // Dynamic role list combining all roles in database
@@ -248,7 +289,7 @@ export const SettingsView: React.FC<{ initialTab?: 'general' | 'roles' | 'databa
     setNewRoleName('');
     setNewRoleKey('');
     setNewRoleDesc('');
-    showNotification(`Custom role "${newRoleName.trim()}" created successfully and saved to Cloud Firestore!`);
+    showNotification(`Custom role "${newRoleName.trim()}" created successfully and saved to Neon PostgreSQL!`);
   };
 
   // Delete custom role
@@ -269,7 +310,7 @@ export const SettingsView: React.FC<{ initialTab?: 'general' | 'roles' | 'databa
     const permsToSave = currentRoleActivePerms;
     updateRole(selectedRoleKey, { permissions: permsToSave });
     logAudit('ROLE_PERMISSIONS_UPDATED', 'RBAC', `Updated permissions for role: ${selectedRoleKey} (${permsToSave.length} permissions)`);
-    showNotification(`Successfully saved permissions for role "${selectedRoleKey.replace('_', ' ')}" to Cloud Firestore!`);
+    showNotification(`Successfully saved permissions for role "${selectedRoleKey.replace('_', ' ')}" to Neon PostgreSQL!`);
   };
 
   // USER PERMISSIONS MANAGEMENT
@@ -349,7 +390,7 @@ export const SettingsView: React.FC<{ initialTab?: 'general' | 'roles' | 'databa
     const permsToSave = currentUserActivePerms;
     updateUser(selectedUser.id, { permissions: permsToSave });
     logAudit('USER_PERMISSIONS_UPDATED', 'RBAC', `Updated permissions for user: ${selectedUser.name} (${selectedUser.email})`);
-    showNotification(`Permissions for ${selectedUser.name} (${selectedUser.role}) updated and saved to Cloud Firestore!`);
+    showNotification(`Permissions for ${selectedUser.name} (${selectedUser.role}) updated and saved to Neon PostgreSQL!`);
   };
 
   // Grouped Permissions by Category
@@ -406,14 +447,14 @@ export const SettingsView: React.FC<{ initialTab?: 'general' | 'roles' | 'databa
           System Settings & Permissions Matrix
         </h2>
         <p className="text-xs sm:text-sm text-slate-500 mt-1">
-          Configure institutional credentials, granular role & user permissions, and live Cloud Firestore database synchronization.
+          Configure institutional credentials, granular role & user permissions, and live Neon PostgreSQL database synchronization.
         </p>
       </div>
 
       {/* Cloud Database Connected Quick Banner */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-3xl bg-gradient-to-r from-emerald-500/10 via-teal-500/10 to-slate-50 border border-emerald-200/80 shadow-xs">
         <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-emerald-100 text-emerald-800 shrink-0">
+          <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-[#00E599]/15 text-[#00A86B] shrink-0">
             <Database className="w-5 h-5" />
           </div>
           <div>
@@ -423,14 +464,14 @@ export const SettingsView: React.FC<{ initialTab?: 'general' | 'roles' | 'databa
                 <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
               </span>
               <span className="text-xs font-bold text-slate-900">
-                Cloud Firestore: {isDatabaseConnected ? 'Connected & Live' : 'Connecting to Cloud...'}
+                Neon PostgreSQL: {isDatabaseConnected ? 'Connected & Live' : 'Connecting to Cloud...'}
               </span>
               <span className="font-mono text-[10px] text-emerald-700 bg-emerald-100/80 px-2 py-0.5 rounded-md font-semibold">
-                {firestoreDatabaseId}
+                {neonDatabase || 'neondb'} (AWS ap-southeast-1)
               </span>
             </div>
             <p className="text-[11px] text-slate-500 mt-0.5">
-              Live multi-device database synchronization active across all 14 academic collections.
+              High-performance serverless PostgreSQL pooling active across all 14 academic collections.
             </p>
           </div>
         </div>
@@ -440,7 +481,7 @@ export const SettingsView: React.FC<{ initialTab?: 'general' | 'roles' | 'databa
             onClick={() => setActiveTab('database')}
             className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-white border border-emerald-300 text-xs font-bold text-emerald-800 hover:bg-emerald-50 transition cursor-pointer self-start sm:self-center shrink-0 shadow-2xs"
           >
-            <span>View Cloud Database Details</span>
+            <span>View Neon PostgreSQL Details</span>
             <ChevronRight className="w-3.5 h-3.5" />
           </button>
         )}
@@ -480,8 +521,8 @@ export const SettingsView: React.FC<{ initialTab?: 'general' | 'roles' | 'databa
               : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
           }`}
         >
-          <Database className="w-4 h-4 text-emerald-500" />
-          <span>Cloud Database (Firebase)</span>
+          <Database className="w-4 h-4 text-[#00E599]" />
+          <span>Cloud Database (Neon PostgreSQL)</span>
           <span className="flex h-2 w-2 relative ml-0.5">
             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
             <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
@@ -511,12 +552,24 @@ export const SettingsView: React.FC<{ initialTab?: 'general' | 'roles' | 'databa
           <Bell className="w-4 h-4" />
           <span>Notifications</span>
         </button>
+
+        <button
+          onClick={() => setActiveTab('security')}
+          className={`flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-bold transition cursor-pointer ${
+            activeTab === 'security'
+              ? 'bg-[#117B78] text-white shadow-xs'
+              : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
+          }`}
+        >
+          <Lock className="w-4 h-4 text-amber-500" />
+          <span>Security & Password</span>
+        </button>
       </div>
 
       {savedSuccess && (
         <div className="rounded-2xl bg-emerald-50 border border-emerald-200 p-4 text-xs font-bold text-emerald-800 flex items-center gap-2 animate-in fade-in">
           <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-          <span>{successMessage || 'Configurations updated and synced to Firestore cloud.'}</span>
+          <span>{successMessage || 'Configurations updated and synced to Neon PostgreSQL.'}</span>
         </div>
       )}
 
@@ -1222,19 +1275,19 @@ export const SettingsView: React.FC<{ initialTab?: 'general' | 'roles' | 'databa
           <div className="rounded-3xl bg-gradient-to-br from-slate-900 to-slate-800 p-6 sm:p-8 text-white shadow-lg space-y-6">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-700/60 pb-6">
               <div className="flex items-start gap-4">
-                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 shrink-0">
+                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#00E599]/20 text-[#00E599] border border-[#00E599]/30 shrink-0">
                   <Database className="w-6 h-6" />
                 </div>
                 <div>
                   <div className="flex items-center gap-2">
-                    <h3 className="text-lg font-black tracking-tight">Google Cloud Firestore</h3>
+                    <h3 className="text-lg font-black tracking-tight">Neon PostgreSQL (Serverless)</h3>
                     <span className="rounded-full bg-emerald-500/20 px-2.5 py-0.5 text-[10px] font-bold text-emerald-300 border border-emerald-500/30 flex items-center gap-1.5">
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                      <span className="w-1.5 h-1.5 rounded-full bg-[#00E599] animate-pulse"></span>
                       Live & Synchronized
                     </span>
                   </div>
                   <p className="text-xs text-slate-300 mt-1 max-w-xl leading-relaxed">
-                    Primary cloud persistence layer. All academic entities, users, classes, assignments, and leads are synchronized via real-time WebSocket listeners across all browsers.
+                    Primary cloud persistence layer running on Neon Serverless PostgreSQL with auto-scaling connection pooling. All academic entities, users, classes, assignments, and leads are safely persisted with full ACID compliance.
                   </p>
                 </div>
               </div>
@@ -1248,7 +1301,7 @@ export const SettingsView: React.FC<{ initialTab?: 'general' | 'roles' | 'databa
                   className="flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-xs font-bold text-white shadow-md hover:bg-emerald-500 transition cursor-pointer disabled:opacity-50"
                 >
                   <RefreshCw className={`w-3.5 h-3.5 ${isPingingDb || isSyncing ? 'animate-spin' : ''}`} />
-                  <span>{isPingingDb ? 'Pinging Cloud...' : 'Test Sync Ping'}</span>
+                  <span>{isPingingDb ? 'Pinging Neon...' : 'Test Sync Ping'}</span>
                 </button>
               </div>
             </div>
@@ -1258,46 +1311,46 @@ export const SettingsView: React.FC<{ initialTab?: 'general' | 'roles' | 'databa
               <div className="p-3.5 rounded-2xl bg-slate-800/80 border border-slate-700/80 relative group">
                 <div className="flex items-center justify-between mb-1">
                   <span className="text-[10px] uppercase font-bold text-slate-400">
-                    Database ID
+                    Database Name
                   </span>
                   <button
-                    onClick={() => handleCopy(firestoreDatabaseId, 'dbid')}
+                    onClick={() => handleCopy(neonDatabase || 'neondb', 'dbid')}
                     className="text-slate-400 hover:text-white p-0.5 rounded cursor-pointer transition"
-                    title="Copy Database ID"
+                    title="Copy Database Name"
                   >
                     {copiedKey === 'dbid' ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
                   </button>
                 </div>
-                <span className="font-mono font-bold text-emerald-300 text-xs break-all" title={firestoreDatabaseId}>
-                  {firestoreDatabaseId}
+                <span className="font-mono font-bold text-[#00E599] text-xs break-all" title={neonDatabase || 'neondb'}>
+                  {neonDatabase || 'neondb'}
                 </span>
               </div>
 
               <div className="p-3.5 rounded-2xl bg-slate-800/80 border border-slate-700/80 relative group">
                 <div className="flex items-center justify-between mb-1">
                   <span className="text-[10px] uppercase font-bold text-slate-400">
-                    GCP Project ID
+                    Neon Host (Pooler)
                   </span>
                   <button
-                    onClick={() => handleCopy(firebaseProjectId, 'projid')}
+                    onClick={() => handleCopy(neonHost, 'projid')}
                     className="text-slate-400 hover:text-white p-0.5 rounded cursor-pointer transition"
-                    title="Copy Project ID"
+                    title="Copy Neon Host"
                   >
                     {copiedKey === 'projid' ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
                   </button>
                 </div>
-                <span className="font-mono font-bold text-white text-xs">
-                  {firebaseProjectId}
+                <span className="font-mono font-bold text-white text-[11px] truncate block" title={neonHost}>
+                  {neonHost}
                 </span>
               </div>
 
               <div className="p-3.5 rounded-2xl bg-slate-800/80 border border-slate-700/80">
                 <span className="text-[10px] uppercase font-bold text-slate-400 block mb-1">
-                  Sync Mode
+                  Region & Engine
                 </span>
                 <span className="font-bold text-emerald-300 text-xs flex items-center gap-1.5">
-                  <Activity className="w-3.5 h-3.5 text-emerald-400" />
-                  WebSocket (onSnapshot)
+                  <Activity className="w-3.5 h-3.5 text-[#00E599]" />
+                  PostgreSQL 18 • {neonRegion || 'AWS ap-southeast-1'}
                 </span>
               </div>
 
@@ -1306,7 +1359,7 @@ export const SettingsView: React.FC<{ initialTab?: 'general' | 'roles' | 'databa
                   Latency Ping
                 </span>
                 <span className="font-mono font-bold text-white text-xs">
-                  {dbLatency !== null ? `${dbLatency} ms (Fast)` : isDatabaseConnected ? 'Connected' : 'Offline'}
+                  {dbLatency !== null ? `${dbLatency} ms (Fast)` : neonLatency !== null ? `${neonLatency} ms` : isDatabaseConnected ? 'Connected' : 'Offline'}
                 </span>
               </div>
             </div>
@@ -1322,15 +1375,15 @@ export const SettingsView: React.FC<{ initialTab?: 'general' | 'roles' | 'databa
           {/* Cross-Browser Synchronous Guarantee Card */}
           <div className="rounded-3xl bg-white border border-slate-200 p-6 shadow-xs space-y-3">
             <div className="flex items-start gap-3">
-              <div className="h-10 w-10 rounded-2xl bg-emerald-100 text-emerald-800 flex items-center justify-center shrink-0">
+              <div className="h-10 w-10 rounded-2xl bg-[#00E599]/15 text-[#00A86B] flex items-center justify-center shrink-0">
                 <CheckCircle2 className="w-5 h-5" />
               </div>
               <div>
                 <h4 className="text-sm font-bold text-slate-900">
-                  Cross-Browser & Multi-Device Real-Time Architecture
+                  Neon PostgreSQL Serverless Architecture
                 </h4>
                 <p className="text-xs text-slate-500 mt-1 leading-relaxed">
-                  When you delete or edit a record in one browser (e.g. Chrome), a <code className="font-mono bg-slate-100 px-1 py-0.5 rounded text-slate-800">deleteDoc()</code> or <code className="font-mono bg-slate-100 px-1 py-0.5 rounded text-slate-800">setDoc()</code> mutation executes directly on Google Cloud Firestore. Firestore emits a real-time event to all open tabs and browsers, immediately purging or updating the item everywhere. No stale deleted data will ever reappear upon page refresh or when logging in from a different browser.
+                  When you modify or delete any record, an atomic ACID SQL mutation runs directly on Neon PostgreSQL using connection pooling. Updates propagate immediately across all open tabs via BroadcastChannel and periodic background reconciliation.
                 </p>
               </div>
             </div>
@@ -1340,14 +1393,14 @@ export const SettingsView: React.FC<{ initialTab?: 'general' | 'roles' | 'databa
           <div className="rounded-3xl bg-white border border-slate-200 p-6 shadow-xs space-y-4">
             <div className="flex items-center justify-between pb-3 border-b border-slate-100">
               <div>
-                <h4 className="text-sm font-bold text-slate-900">Live Cloud Firestore Collections</h4>
+                <h4 className="text-sm font-bold text-slate-900">Neon PostgreSQL Tables & Collections</h4>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  14 synchronized collections actively listening for live database events.
+                  14 synchronized collections actively stored in Neon PostgreSQL database.
                 </p>
               </div>
 
               <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-bold text-emerald-800">
-                All 14 Connected
+                All 14 Synchronized
               </span>
             </div>
 
@@ -1567,6 +1620,137 @@ export const SettingsView: React.FC<{ initialTab?: 'general' | 'roles' | 'databa
               </div>
               <input type="checkbox" defaultChecked className="h-4 w-4 accent-[#117B78]" />
             </label>
+          </div>
+        </div>
+      )}
+
+      {/* ======================================================== */}
+      {/* 6. SECURITY & PASSWORD TAB */}
+      {/* ======================================================== */}
+      {activeTab === 'security' && (
+        <div className="space-y-6 max-w-2xl">
+          {/* Account Overview Box */}
+          <div className="rounded-3xl bg-white border border-slate-200 p-6 shadow-xs space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="h-12 w-12 rounded-2xl bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
+                <ShieldCheck className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-slate-900">Super Administrator Credentials</h3>
+                <p className="text-xs text-slate-500">
+                  This account has unrestricted root access across all modules, courses, and settings.
+                </p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 text-xs">
+              <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-100">
+                <span className="text-[10px] uppercase font-bold text-slate-400 block mb-0.5">Primary Username</span>
+                <span className="font-mono font-bold text-slate-900 text-sm">@{currentUser?.username || 'admin'}</span>
+              </div>
+
+              <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-100">
+                <span className="text-[10px] uppercase font-bold text-slate-400 block mb-0.5">Official Email</span>
+                <span className="font-mono font-bold text-slate-900 text-sm">{currentUser?.email || 'admin@institution.local'}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Change Password Form */}
+          <div className="rounded-3xl bg-white border border-slate-200 p-6 shadow-xs space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div>
+                <h4 className="text-sm font-bold text-slate-900">Change Super Admin Password</h4>
+                <p className="text-xs text-slate-500">
+                  Update the root password used to access the portal.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowAdminPassFields(!showAdminPassFields)}
+                className="text-xs font-bold text-[#117B78] hover:underline cursor-pointer flex items-center gap-1"
+              >
+                {showAdminPassFields ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                <span>{showAdminPassFields ? 'Hide Passwords' : 'Show Passwords'}</span>
+              </button>
+            </div>
+
+            {passwordChangeError && (
+              <div className="rounded-2xl bg-rose-50 border border-rose-200 p-3.5 text-xs text-rose-800 flex items-start gap-2">
+                <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                <span className="font-semibold">{passwordChangeError}</span>
+              </div>
+            )}
+
+            {passwordChangeSuccess && (
+              <div className="rounded-2xl bg-emerald-50 border border-emerald-200 p-3.5 text-xs text-emerald-800 flex items-start gap-2">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                <span className="font-semibold">{passwordChangeSuccess}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleUpdateAdminPassword} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Current Password
+                </label>
+                <div className="relative">
+                  <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                  <input
+                    type={showAdminPassFields ? 'text' : 'password'}
+                    required
+                    value={currentAdminPassword}
+                    onChange={(e) => setCurrentAdminPassword(e.target.value)}
+                    placeholder="Enter current password"
+                    className="w-full h-10 rounded-xl border border-slate-200 pl-10 pr-4 text-xs font-medium outline-none focus:border-[#117B78]"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    New Secure Password
+                  </label>
+                  <div className="relative">
+                    <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                    <input
+                      type={showAdminPassFields ? 'text' : 'password'}
+                      required
+                      value={newAdminPassword}
+                      onChange={(e) => setNewAdminPassword(e.target.value)}
+                      placeholder="At least 8 characters"
+                      className="w-full h-10 rounded-xl border border-slate-200 pl-10 pr-4 text-xs font-medium outline-none focus:border-[#117B78]"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Confirm New Password
+                  </label>
+                  <div className="relative">
+                    <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                    <input
+                      type={showAdminPassFields ? 'text' : 'password'}
+                      required
+                      value={confirmAdminPassword}
+                      onChange={(e) => setConfirmAdminPassword(e.target.value)}
+                      placeholder="Re-type new password"
+                      className="w-full h-10 rounded-xl border border-slate-200 pl-10 pr-4 text-xs font-medium outline-none focus:border-[#117B78]"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                className="flex items-center justify-center gap-2 px-5 h-10 rounded-xl bg-[#117B78] text-xs font-bold text-white shadow-sm hover:bg-[#0D9C88] transition cursor-pointer"
+              >
+                <Save className="w-4 h-4" />
+                <span>Save New Password</span>
+              </button>
+            </form>
           </div>
         </div>
       )}

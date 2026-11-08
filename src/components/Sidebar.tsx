@@ -1,3 +1,5 @@
+'use client';
+
 import React from 'react';
 import {
   LayoutDashboard,
@@ -322,7 +324,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen = false, onClose }) => 
           >
             <div className="flex items-center gap-2">
               <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-              <p className="text-[11px] font-bold text-slate-800">Cloud Firestore Online</p>
+              <p className="text-[11px] font-bold text-slate-800">Neon PostgreSQL Online</p>
             </div>
             <p className="text-[10px] text-slate-500 mt-0.5">
               View Database details in Settings →

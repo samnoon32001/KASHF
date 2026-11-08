@@ -1,3 +1,5 @@
+'use client';
+
 import React, { useState, useEffect } from 'react';
 import { AppProvider, useApp } from './context/AppContext';
 import { Header } from './components/Header';
@@ -34,27 +36,30 @@ import {
   AlertCircle,
   CheckCircle2,
 } from 'lucide-react';
+import { useOnlineStatus } from './hooks/useOnlineStatus';
 import { RoleType } from './types';
 
 const MainLayout: React.FC = () => {
+  const isOnline = useOnlineStatus();
+  const isOffline = !isOnline;
+
   const {
     currentUser,
     activeTab,
     loginWithCredentials,
     settings,
-    isOffline,
     isDatabaseConnected,
     firestoreDatabaseId,
   } = useApp();
 
   // Login form state
   const [identifier, setIdentifier] = useState(() => {
+    if (typeof window === 'undefined') return '';
     return localStorage.getItem('kashf_saved_username') || '';
   });
-  const [password, setPassword] = useState(() => {
-    return localStorage.getItem('kashf_saved_password') || '';
-  });
+  const [password, setPassword] = useState('');
   const [rememberMe, setRememberMe] = useState(() => {
+    if (typeof window === 'undefined') return false;
     return localStorage.getItem('kashf_remember_me') === 'true';
   });
   const [showPassword, setShowPassword] = useState(false);
@@ -62,6 +67,13 @@ const MainLayout: React.FC = () => {
   const [authError, setAuthError] = useState('');
 
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+
+  // Clean up legacy plaintext password storage if present
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('kashf_saved_password');
+    }
+  }, []);
 
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -80,11 +92,9 @@ const MainLayout: React.FC = () => {
       } else {
         if (rememberMe) {
           localStorage.setItem('kashf_saved_username', identifier.trim());
-          localStorage.setItem('kashf_saved_password', password);
           localStorage.setItem('kashf_remember_me', 'true');
         } else {
           localStorage.removeItem('kashf_saved_username');
-          localStorage.removeItem('kashf_saved_password');
           localStorage.setItem('kashf_remember_me', 'false');
         }
       }
@@ -129,7 +139,7 @@ const MainLayout: React.FC = () => {
             Sign in to your Account
           </h2>
           <p className="mt-1 text-center text-xs text-slate-500">
-            Role-based access for Super Admin, Faculty, Coordinators, and Students
+            Secure Role-Based Access • Super Admin & Authorized Users
           </p>
         </div>
 
@@ -155,7 +165,7 @@ const MainLayout: React.FC = () => {
                     required
                     value={identifier}
                     onChange={(e) => setIdentifier(e.target.value)}
-                    placeholder="e.g. admin or sarah_jenkins or student@kashf.edu"
+                    placeholder="e.g. admin or assigned username"
                     className="w-full h-11 rounded-xl border border-slate-200 bg-white pl-10 pr-4 text-xs font-medium text-slate-900 outline-none focus:border-[#117B78] focus:ring-2 focus:ring-[#117B78]/15 transition"
                   />
                 </div>
@@ -194,7 +204,7 @@ const MainLayout: React.FC = () => {
                     className="h-4 w-4 rounded border-slate-300 accent-[#117B78] focus:ring-[#117B78]"
                   />
                   <span className="text-xs font-semibold text-slate-600">
-                    Save Password / Remember Me
+                    Remember Username
                   </span>
                 </label>
               </div>
@@ -222,9 +232,9 @@ const MainLayout: React.FC = () => {
                 <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
               </span>
               <span className="font-semibold text-slate-700">
-                Cloud Firestore: {isDatabaseConnected ? 'Connected & Live' : 'Connecting...'}
+                Neon PostgreSQL: {isDatabaseConnected ? 'Connected & Live' : 'Connecting...'}
               </span>
-              <span className="font-mono text-[9px] text-slate-400">({firestoreDatabaseId.slice(0, 16)}...)</span>
+              <span className="font-mono text-[9px] text-slate-400">({firestoreDatabaseId})</span>
             </div>
           </div>
         </div>
@@ -288,7 +298,7 @@ const MainLayout: React.FC = () => {
           <div className="bg-amber-500 text-white px-4 py-2 text-xs font-bold flex items-center justify-center gap-2">
             <WifiOff className="w-4 h-4" />
             <span>
-              Offline Mode Active (PWA). All modifications are saved locally and will synchronize with Firestore once reconnected.
+              Offline Mode Active (PWA). All modifications are saved locally and will synchronize with Neon PostgreSQL once reconnected.
             </span>
           </div>
         )}

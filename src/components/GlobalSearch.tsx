@@ -1,3 +1,5 @@
+'use client';
+
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   Search,
@@ -297,9 +299,8 @@ export const GlobalSearch: React.FC<GlobalSearchProps> = ({
       {/* Instant Search Results Dropdown / Modal Overlay */}
       {isOpen && (
         <div
-          className={`absolute left-0 mt-2 w-full rounded-2xl bg-white shadow-2xl border border-slate-200 z-50 overflow-hidden animate-in fade-in zoom-in-95 ${
-            isMobileModal ? 'static mt-3 max-h-[75vh]' : 'max-h-[520px]'
-          } flex flex-col`}
+          className={`absolute left-0 mt-2 w-full rounded-2xl bg-white shadow-2xl border border-slate-200 z-50 overflow-hidden animate-in fade-in zoom-in-95 ${isMobileModal ? 'static mt-3 max-h-[75vh]' : 'max-h-[520px]'
+            } flex flex-col`}
         >
           {/* Categories Tab Bar */}
           <div className="p-2 border-b border-slate-100 bg-slate-50/60 flex items-center gap-1.5 overflow-x-auto text-[11px] shrink-0">
@@ -314,18 +315,16 @@ export const GlobalSearch: React.FC<GlobalSearchProps> = ({
                 key={cat.id}
                 type="button"
                 onClick={() => setActiveCategory(cat.id as SearchCategory)}
-                className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1 font-semibold transition shrink-0 cursor-pointer ${
-                  activeCategory === cat.id
-                    ? 'bg-[#117B78] text-white shadow-xs'
-                    : 'text-slate-600 hover:bg-slate-200/70 hover:text-slate-900'
-                }`}
+                className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1 font-semibold transition shrink-0 cursor-pointer ${activeCategory === cat.id
+                  ? 'bg-[#117B78] text-white shadow-xs'
+                  : 'text-slate-600 hover:bg-slate-200/70 hover:text-slate-900'
+                  }`}
               >
                 <span>{cat.label}</span>
                 {hasSearchQuery && (
                   <span
-                    className={`rounded-full px-1.5 py-0.2 text-[9px] font-bold ${
-                      activeCategory === cat.id ? 'bg-white/25 text-white' : 'bg-slate-200 text-slate-700'
-                    }`}
+                    className={`rounded-full px-1.5 py-0.2 text-[9px] font-bold ${activeCategory === cat.id ? 'bg-white/25 text-white' : 'bg-slate-200 text-slate-700'
+                      }`}
                   >
                     {cat.count}
                   </span>
@@ -348,11 +347,10 @@ export const GlobalSearch: React.FC<GlobalSearchProps> = ({
                         key={`student-${student.id}`}
                         onClick={() => handleSelectStudent(student)}
                         onMouseEnter={() => setSelectedIndex(idx)}
-                        className={`group flex items-center justify-between p-2.5 rounded-xl transition cursor-pointer ${
-                          isSelected
-                            ? 'bg-[#117B78]/10 text-slate-900 border border-[#117B78]/30'
-                            : 'hover:bg-slate-50 border border-transparent'
-                        }`}
+                        className={`group flex items-center justify-between p-2.5 rounded-xl transition cursor-pointer ${isSelected
+                          ? 'bg-[#117B78]/10 text-slate-900 border border-[#117B78]/30'
+                          : 'hover:bg-slate-50 border border-transparent'
+                          }`}
                       >
                         <div className="flex items-center gap-3 min-w-0">
                           <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-100 text-emerald-800 shrink-0">
@@ -395,11 +393,10 @@ export const GlobalSearch: React.FC<GlobalSearchProps> = ({
                         key={`course-${course.id}`}
                         onClick={() => handleSelectCourse(course)}
                         onMouseEnter={() => setSelectedIndex(idx)}
-                        className={`group flex items-center justify-between p-2.5 rounded-xl transition cursor-pointer ${
-                          isSelected
-                            ? 'bg-[#117B78]/10 text-slate-900 border border-[#117B78]/30'
-                            : 'hover:bg-slate-50 border border-transparent'
-                        }`}
+                        className={`group flex items-center justify-between p-2.5 rounded-xl transition cursor-pointer ${isSelected
+                          ? 'bg-[#117B78]/10 text-slate-900 border border-[#117B78]/30'
+                          : 'hover:bg-slate-50 border border-transparent'
+                          }`}
                       >
                         <div className="flex items-center gap-3 min-w-0">
                           <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-teal-100 text-[#117B78] shrink-0">
@@ -437,11 +434,10 @@ export const GlobalSearch: React.FC<GlobalSearchProps> = ({
                         key={`task-${task.id}`}
                         onClick={() => handleSelectTask(task)}
                         onMouseEnter={() => setSelectedIndex(idx)}
-                        className={`group flex items-center justify-between p-2.5 rounded-xl transition cursor-pointer ${
-                          isSelected
-                            ? 'bg-[#117B78]/10 text-slate-900 border border-[#117B78]/30'
-                            : 'hover:bg-slate-50 border border-transparent'
-                        }`}
+                        className={`group flex items-center justify-between p-2.5 rounded-xl transition cursor-pointer ${isSelected
+                          ? 'bg-[#117B78]/10 text-slate-900 border border-[#117B78]/30'
+                          : 'hover:bg-slate-50 border border-transparent'
+                          }`}
                       >
                         <div className="flex items-center gap-3 min-w-0">
                           <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-100 text-amber-800 shrink-0">
@@ -479,11 +475,10 @@ export const GlobalSearch: React.FC<GlobalSearchProps> = ({
                         key={`lead-${lead.id}`}
                         onClick={() => handleSelectLead(lead)}
                         onMouseEnter={() => setSelectedIndex(idx)}
-                        className={`group flex items-center justify-between p-2.5 rounded-xl transition cursor-pointer ${
-                          isSelected
-                            ? 'bg-[#117B78]/10 text-slate-900 border border-[#117B78]/30'
-                            : 'hover:bg-slate-50 border border-transparent'
-                        }`}
+                        className={`group flex items-center justify-between p-2.5 rounded-xl transition cursor-pointer ${isSelected
+                          ? 'bg-[#117B78]/10 text-slate-900 border border-[#117B78]/30'
+                          : 'hover:bg-slate-50 border border-transparent'
+                          }`}
                       >
                         <div className="flex items-center gap-3 min-w-0">
                           <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-100 text-indigo-800 shrink-0">
@@ -495,13 +490,12 @@ export const GlobalSearch: React.FC<GlobalSearchProps> = ({
                                 {lead.name}
                               </p>
                               <span
-                                className={`rounded px-1.5 py-0.5 text-[9px] font-bold capitalize ${
-                                  lead.status === 'enrolled'
-                                    ? 'bg-emerald-100 text-emerald-800'
-                                    : lead.status === 'interested'
+                                className={`rounded px-1.5 py-0.5 text-[9px] font-bold capitalize ${lead.status === 'enrolled'
+                                  ? 'bg-emerald-100 text-emerald-800'
+                                  : lead.status === 'interested'
                                     ? 'bg-amber-100 text-amber-800'
                                     : 'bg-indigo-50 text-indigo-800 border border-indigo-200'
-                                }`}
+                                  }`}
                               >
                                 {lead.status}
                               </span>

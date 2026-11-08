@@ -22,12 +22,14 @@ export const ALL_PERMISSIONS: PermissionItem[] = [
   { id: 'students.delete', label: 'Delete Students', category: 'Students', description: 'Can remove students' },
   { id: 'students.import', label: 'Import Students', category: 'Students', description: 'Can bulk import student data' },
   { id: 'students.export', label: 'Export Students', category: 'Students', description: 'Can export student records' },
+  { id: 'students.progress', label: 'Review Student Progress', category: 'Students', description: 'Can review academic progress, attendance percentage, task completion, and performance metrics' },
 
   // Courses
   { id: 'courses.view', label: 'View Courses', category: 'Courses', description: 'Can view courses and syllabus' },
   { id: 'courses.create', label: 'Create Courses', category: 'Courses', description: 'Can create new courses and curriculums' },
   { id: 'courses.edit', label: 'Edit Courses', category: 'Courses', description: 'Can modify course details and subjects' },
   { id: 'courses.delete', label: 'Delete Courses', category: 'Courses', description: 'Can delete courses' },
+  { id: 'courses.enroll', label: 'Enroll / Manage Students', category: 'Courses', description: 'Can add and remove student enrollments in courses' },
 
   // Faculties
   { id: 'faculties.view', label: 'View Faculties', category: 'Faculties', description: 'Can view faculty profiles and workload' },
@@ -100,7 +102,9 @@ export const DEFAULT_ROLE_DEFINITIONS: RoleDefinition[] = [
       'users.view',
       'students.view',
       'students.export',
+      'students.progress',
       'courses.view',
+      'courses.enroll',
       'faculties.view',
       'attendance.view',
       'attendance.export',
@@ -127,9 +131,11 @@ export const DEFAULT_ROLE_DEFINITIONS: RoleDefinition[] = [
       'students.edit',
       'students.import',
       'students.export',
+      'students.progress',
       'courses.view',
       'courses.create',
       'courses.edit',
+      'courses.enroll',
       'faculties.view',
       'faculties.create',
       'faculties.edit',
@@ -171,6 +177,7 @@ export const DEFAULT_ROLE_DEFINITIONS: RoleDefinition[] = [
     permissions: [
       'courses.view',
       'students.view',
+      'students.progress',
       'attendance.view',
       'attendance.create',
       'attendance.edit',

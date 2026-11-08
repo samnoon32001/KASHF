@@ -1,3 +1,5 @@
+'use client';
+
 import React, { useState, useEffect } from 'react';
 import {
   CheckSquare,
@@ -688,7 +690,9 @@ export const TasksView: React.FC = () => {
                 <tbody className="divide-y divide-slate-100 text-slate-800">
                   {pointsHistory.map((item) => (
                     <tr key={item.id} className="hover:bg-slate-50/60 transition">
-                      <td className="px-5 py-4 font-bold text-slate-900">{item.studentName}</td>
+                      <td className="px-5 py-4 font-bold text-slate-900">
+                        {item.studentName || users.find((u) => u.id === item.studentId)?.name || 'Student'}
+                      </td>
                       <td className="px-5 py-4">
                         <span
                           className={`font-black text-xs px-2.5 py-1 rounded-md ${

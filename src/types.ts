@@ -136,6 +136,8 @@ export interface AttendanceSession {
   absentCount: number;
   lateCount: number;
   excusedCount?: number;
+  takenBy?: string;
+  takenByName?: string;
 }
 
 export interface Task {
@@ -172,6 +174,7 @@ export interface TaskSubmission {
 export interface StudentPointsHistory {
   id: string;
   studentId: string;
+  studentName?: string;
   points: number;
   reason: string;
   date: string;

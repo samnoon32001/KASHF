@@ -1,3 +1,5 @@
+'use client';
+
 import React, { useState, useEffect } from 'react';
 import {
   Users,
@@ -24,10 +26,12 @@ import {
   X,
   Copy,
   Check,
+  TrendingUp,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { UserProfile, UserRole } from '../types';
 import { ALL_PERMISSIONS, ROLE_DEFAULT_PERMISSIONS, PermissionItem } from '../data/permissions';
+import { StudentProgressModal } from '../components/StudentProgressModal';
 
 export const UsersView: React.FC<{ initialFilter?: 'all' | 'faculty' | 'student' | 'staff' }> = ({
   initialFilter = 'all',
@@ -64,6 +68,8 @@ export const UsersView: React.FC<{ initialFilter?: 'all' | 'faculty' | 'student'
   const [userDraftPermissions, setUserDraftPermissions] = useState<string[]>([]);
   const [permissionModalSearch, setPermissionModalSearch] = useState('');
   const [permissionsSaveSuccess, setPermissionsSaveSuccess] = useState(false);
+  const [selectedStudentForProgress, setSelectedStudentForProgress] = useState<UserProfile | null>(null);
+  const canReviewProgress = can('students.progress') || currentUser?.role === 'super_admin';
 
   const handleOpenPermissionsModal = (u: UserProfile) => {
     setUserForPermissionsModal(u);
@@ -123,6 +129,14 @@ export const UsersView: React.FC<{ initialFilter?: 'all' | 'faculty' | 'student'
   const [editStatus, setEditStatus] = useState<'active' | 'inactive'>('active');
 
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [createdUserCredentials, setCreatedUserCredentials] = useState<{
+    name: string;
+    username: string;
+    password: string;
+    role: string;
+    email: string;
+  } | null>(null);
+  const [copiedCreatedCreds, setCopiedCreatedCreds] = useState(false);
 
   const canEditUsers = can('users.edit') || currentUser?.role === 'super_admin';
   const canDeleteUsers = can('users.delete') || currentUser?.role === 'super_admin';
@@ -150,12 +164,18 @@ export const UsersView: React.FC<{ initialFilter?: 'all' | 'faculty' | 'student'
   });
 
   const generateRandomPassword = () => {
-    const chars = 'abcdefghjkmnpqrstuvwxyz23456789';
-    let pass = '';
-    for (let i = 0; i < 8; i++) {
-      pass += chars.charAt(Math.floor(Math.random() * chars.length));
+    const letters = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz';
+    const numbers = '23456789';
+    const symbols = '!@#$%&*';
+    let pass = 'Kashf@';
+    for (let i = 0; i < 4; i++) {
+      pass += letters.charAt(Math.floor(Math.random() * letters.length));
     }
-    return pass + '123';
+    for (let i = 0; i < 2; i++) {
+      pass += numbers.charAt(Math.floor(Math.random() * numbers.length));
+    }
+    pass += symbols.charAt(Math.floor(Math.random() * symbols.length));
+    return pass;
   };
 
   const handleOpenAddModal = (defaultRole?: UserRole) => {
@@ -175,8 +195,8 @@ export const UsersView: React.FC<{ initialFilter?: 'all' | 'faculty' | 'student'
     e.preventDefault();
     if (!formName.trim() || !formEmail.trim()) return;
 
-    const username = formUsername.trim() || formEmail.split('@')[0].toLowerCase().replace(/[^a-z0-9]/g, '');
-    const password = formPassword.trim() || 'password123';
+    const username = formUsername.trim() || formEmail.split('@')[0].toLowerCase().replace(/[^a-z0-9_]/g, '');
+    const password = formPassword.trim() || generateRandomPassword();
 
     addUser({
       name: formName.trim(),
@@ -191,6 +211,14 @@ export const UsersView: React.FC<{ initialFilter?: 'all' | 'faculty' | 'student'
         formRole === 'student'
           ? formAdmissionNumber.trim() || 'ADM-2026-' + Math.floor(100 + Math.random() * 900)
           : undefined,
+    });
+
+    setCreatedUserCredentials({
+      name: formName.trim(),
+      username,
+      password,
+      role: formRole,
+      email: formEmail.trim().toLowerCase(),
     });
 
     setShowAddModal(false);
@@ -462,6 +490,16 @@ export const UsersView: React.FC<{ initialFilter?: 'all' | 'faculty' | 'student'
 
                     <td className="py-4 px-6 text-right">
                       <div className="flex items-center justify-end gap-1">
+                        {user.role === 'student' && canReviewProgress && (
+                          <button
+                            onClick={() => setSelectedStudentForProgress(user)}
+                            title="Review Academic Progress"
+                            className="p-1.5 rounded-lg text-slate-400 hover:bg-emerald-50 hover:text-emerald-700 cursor-pointer transition"
+                          >
+                            <TrendingUp className="w-4 h-4 text-emerald-600" />
+                          </button>
+                        )}
+
                         {canEditUsers && (
                           <button
                             onClick={() => handleOpenPermissionsModal(user)}
@@ -950,7 +988,7 @@ export const UsersView: React.FC<{ initialFilter?: 'all' | 'faculty' | 'student'
               {permissionsSaveSuccess && (
                 <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-xs font-bold text-emerald-800 flex items-center gap-2">
                   <CheckCircle className="w-4 h-4 text-emerald-600" />
-                  <span>Permissions successfully saved to Cloud Firestore for this user!</span>
+                  <span>Permissions successfully saved to Neon PostgreSQL for this user!</span>
                 </div>
               )}
 
@@ -1023,6 +1061,82 @@ export const UsersView: React.FC<{ initialFilter?: 'all' | 'faculty' | 'student'
             </div>
           </div>
         </div>
+      )}
+      {/* NEW USER CREATED CREDENTIALS MODAL */}
+      {createdUserCredentials && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 animate-in fade-in">
+          <div className="w-full max-w-md rounded-3xl bg-white p-6 sm:p-8 shadow-2xl border border-slate-100 space-y-5 animate-in zoom-in-95">
+            <div className="flex items-center gap-3">
+              <div className="h-12 w-12 rounded-2xl bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
+                <Check className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-slate-900">User Created Successfully!</h3>
+                <p className="text-xs text-slate-500">
+                  Account is active. Provide these login credentials to the user.
+                </p>
+              </div>
+            </div>
+
+            <div className="rounded-2xl bg-slate-50 p-4 border border-slate-200 space-y-3 font-mono text-xs">
+              <div>
+                <p className="text-[10px] uppercase font-bold text-slate-400 font-sans">Full Name & Role</p>
+                <p className="font-semibold text-slate-800 font-sans">{createdUserCredentials.name} ({createdUserCredentials.role.replace('_', ' ')})</p>
+              </div>
+
+              <div>
+                <p className="text-[10px] uppercase font-bold text-slate-400 font-sans">Username / Email</p>
+                <p className="font-bold text-slate-900 bg-white px-2.5 py-1.5 rounded-lg border border-slate-200">{createdUserCredentials.username}</p>
+              </div>
+
+              <div>
+                <p className="text-[10px] uppercase font-bold text-slate-400 font-sans">Password</p>
+                <p className="font-bold text-emerald-800 bg-emerald-50 px-2.5 py-1.5 rounded-lg border border-emerald-200 select-all">{createdUserCredentials.password}</p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  const text = `Username: ${createdUserCredentials.username}\nPassword: ${createdUserCredentials.password}\nRole: ${createdUserCredentials.role}\nPortal URL: ${window.location.origin}`;
+                  navigator.clipboard.writeText(text);
+                  setCopiedCreatedCreds(true);
+                  setTimeout(() => setCopiedCreatedCreds(false), 2500);
+                }}
+                className="flex-1 h-11 flex items-center justify-center gap-2 rounded-xl bg-[#117B78] text-xs font-bold text-white shadow-sm hover:bg-[#0D9C88] transition cursor-pointer"
+              >
+                {copiedCreatedCreds ? (
+                  <>
+                    <Check className="w-4 h-4" />
+                    <span>Credentials Copied!</span>
+                  </>
+                ) : (
+                  <>
+                    <Copy className="w-4 h-4" />
+                    <span>Copy Login Credentials</span>
+                  </>
+                )}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setCreatedUserCredentials(null)}
+                className="h-11 px-5 rounded-xl border border-slate-200 text-xs font-bold text-slate-700 hover:bg-slate-100 transition cursor-pointer"
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Student Progress Modal */}
+      {selectedStudentForProgress && (
+        <StudentProgressModal
+          student={selectedStudentForProgress}
+          onClose={() => setSelectedStudentForProgress(null)}
+        />
       )}
     </div>
   );

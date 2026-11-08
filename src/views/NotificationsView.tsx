@@ -1,3 +1,5 @@
+'use client';
+
 import React, { useState } from 'react';
 import {
   Bell,
@@ -62,6 +64,7 @@ export const NotificationsView: React.FC = () => {
     if (!title.trim() || !message.trim()) return;
 
     addNotification({
+      userId: targetRole,
       title: title.trim(),
       message: message.trim(),
       type,

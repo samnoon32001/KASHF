@@ -1,3 +1,5 @@
+'use client';
+
 import React, { useState, useEffect } from 'react';
 import {
   BookOpen,
@@ -18,9 +20,17 @@ import {
   Edit,
   AlertTriangle,
   X,
+  UserPlus,
+  UserMinus,
+  TrendingUp,
+  Award,
+  CheckSquare,
+  Square,
+  Download,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
-import { Course, Subject } from '../types';
+import { Course, Subject, UserProfile } from '../types';
+import { StudentProgressModal } from '../components/StudentProgressModal';
 
 export const CoursesView: React.FC = () => {
   const {
@@ -33,6 +43,14 @@ export const CoursesView: React.FC = () => {
     addSubject,
     updateSubject,
     deleteSubject,
+    addUser,
+    enrollStudentsInCourse,
+    removeStudentFromCourse,
+    attendance,
+    tasks,
+    taskSubmissions,
+    pointsHistory,
+    exportToCSV,
     can,
     currentUser,
     setActiveTab,
@@ -91,8 +109,153 @@ export const CoursesView: React.FC = () => {
   const [editSubjectStatus, setEditSubjectStatus] = useState<Subject['status']>('active');
 
   const canEdit = can('courses.edit') || currentUser?.role === 'super_admin';
+  const canEnrollStudents = can('courses.enroll') || currentUser?.role === 'super_admin';
+  const canReviewProgress = can('students.progress') || currentUser?.role === 'super_admin';
   const facultyMembers = users.filter((u) => u.role === 'faculty');
   const studentsList = users.filter((u) => u.role === 'student');
+
+  // Enroll Students Modal State
+  const [showEnrollModal, setShowEnrollModal] = useState(false);
+  const [selectedEnrollIds, setSelectedEnrollIds] = useState<string[]>([]);
+  const [enrollSearch, setEnrollSearch] = useState('');
+  const [enrollTab, setEnrollTab] = useState<'existing' | 'new'>('existing');
+  const [quickStudentName, setQuickStudentName] = useState('');
+  const [quickStudentEmail, setQuickStudentEmail] = useState('');
+  const [quickStudentPassword, setQuickStudentPassword] = useState('Student@2026#Secure');
+  const [quickStudentAdmission, setQuickStudentAdmission] = useState('');
+  const [enrollFeedback, setEnrollFeedback] = useState('');
+
+  // Unenroll Confirmation State
+  const [studentToUnenroll, setStudentToUnenroll] = useState<UserProfile | null>(null);
+
+  // Student Progress Modal State
+  const [selectedStudentForProgress, setSelectedStudentForProgress] = useState<UserProfile | null>(null);
+
+  // Cohort Progress Overview Modal State
+  const [showCohortProgressModal, setShowCohortProgressModal] = useState(false);
+  const [cohortSearch, setCohortSearch] = useState('');
+
+  // Helper function to calculate student quick stats in a course
+  const getStudentCourseStats = (studentId: string, courseId: string) => {
+    const courseSessions = attendance.filter((a) => a.courseId === courseId);
+    let present = 0;
+    let totalSessions = 0;
+    courseSessions.forEach((sess) => {
+      const rec = sess.records?.find((r) => r.studentId === studentId);
+      if (rec) {
+        totalSessions++;
+        if (rec.status === 'present' || rec.status === 'late') present++;
+      }
+    });
+    const attnRate = totalSessions > 0 ? Math.round((present / totalSessions) * 100) : 100;
+
+    const courseTasks = tasks.filter((t) => t.courseId === courseId);
+    const submissions = taskSubmissions.filter(
+      (sub) => sub.studentId === studentId && courseTasks.some((t) => t.id === sub.taskId)
+    );
+    const taskRate = courseTasks.length > 0 ? Math.round((submissions.length / courseTasks.length) * 100) : 100;
+
+    const pts = pointsHistory
+      .filter((p) => p.studentId === studentId)
+      .reduce((sum, p) => sum + (p.points || 0), 0);
+
+    return {
+      attnRate,
+      taskRate,
+      pts,
+      submittedTasks: submissions.length,
+      totalTasks: courseTasks.length,
+      totalSessions,
+    };
+  };
+
+  const handleOpenEnrollModal = () => {
+    if (!selectedCourse) return;
+    setSelectedEnrollIds([...selectedCourse.studentIds]);
+    setEnrollSearch('');
+    setEnrollTab('existing');
+    setQuickStudentAdmission('ADM-2026-' + Math.floor(100 + Math.random() * 900));
+    setEnrollFeedback('');
+    setShowEnrollModal(true);
+  };
+
+  const handleToggleEnrollId = (studentId: string) => {
+    setSelectedEnrollIds((prev) =>
+      prev.includes(studentId) ? prev.filter((id) => id !== studentId) : [...prev, studentId]
+    );
+  };
+
+  const handleSaveEnrollments = () => {
+    if (!selectedCourse) return;
+    enrollStudentsInCourse(selectedCourse.id, selectedEnrollIds);
+    setSelectedCourse({ ...selectedCourse, studentIds: selectedEnrollIds });
+    setEnrollFeedback(`Successfully updated course enrollment (${selectedEnrollIds.length} students).`);
+    setTimeout(() => {
+      setEnrollFeedback('');
+      setShowEnrollModal(false);
+    }, 1200);
+  };
+
+  const handleQuickAddAndEnroll = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedCourse || !quickStudentName.trim() || !quickStudentEmail.trim()) return;
+
+    const newId = 'user-student-' + Date.now();
+    const newStudent: UserProfile = {
+      id: newId,
+      name: quickStudentName.trim(),
+      email: quickStudentEmail.trim().toLowerCase(),
+      username: quickStudentEmail.trim().toLowerCase().split('@')[0],
+      password: quickStudentPassword,
+      role: 'student',
+      status: 'active',
+      department: selectedCourse.name,
+      admissionNumber: quickStudentAdmission.trim() || 'ADM-' + Date.now().toString().slice(-4),
+      joiningDate: new Date().toISOString().split('T')[0],
+      permissions: ['courses.view', 'attendance.view', 'tasks.view'],
+    };
+
+    addUser(newStudent);
+
+    const updatedStudentIds = Array.from(new Set([...selectedCourse.studentIds, newId]));
+    enrollStudentsInCourse(selectedCourse.id, updatedStudentIds);
+    setSelectedCourse({ ...selectedCourse, studentIds: updatedStudentIds });
+
+    setEnrollFeedback(`Student ${newStudent.name} created and enrolled into ${selectedCourse.code}!`);
+    setQuickStudentName('');
+    setQuickStudentEmail('');
+    setTimeout(() => {
+      setEnrollFeedback('');
+      setShowEnrollModal(false);
+    }, 1500);
+  };
+
+  const handleConfirmUnenroll = () => {
+    if (!selectedCourse || !studentToUnenroll) return;
+    removeStudentFromCourse(selectedCourse.id, studentToUnenroll.id);
+    const updatedIds = selectedCourse.studentIds.filter((id) => id !== studentToUnenroll.id);
+    setSelectedCourse({ ...selectedCourse, studentIds: updatedIds });
+    setStudentToUnenroll(null);
+  };
+
+  const handleExportCohortCSV = () => {
+    if (!selectedCourse) return;
+    const rows = enrolledStudents.map((s) => {
+      const stats = getStudentCourseStats(s.id, selectedCourse.id);
+      return {
+        'Student Name': s.name,
+        'Admission Number': s.admissionNumber || 'N/A',
+        'Email': s.email,
+        'Phone': s.phone || 'N/A',
+        'Attendance Rate (%)': stats.attnRate,
+        'Sessions Attended': `${stats.attnRate}% (${stats.totalSessions} sessions)`,
+        'Tasks Completed': `${stats.submittedTasks} / ${stats.totalTasks}`,
+        'Honor Points': stats.pts,
+        'Enrolled Course': `${selectedCourse.name} (${selectedCourse.code})`,
+      };
+    });
+    exportToCSV(`${selectedCourse.code}_cohort_progress_report.csv`, rows);
+  };
 
   const filteredCourses = courses.filter(
     (c) =>
@@ -500,36 +663,135 @@ export const CoursesView: React.FC = () => {
               </div>
             </div>
 
-            {/* Enrolled Students Roster preview */}
+            {/* Enrolled Students Roster */}
             <div>
-              <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-                <h4 className="text-sm font-bold text-slate-900">
-                  Enrolled Students ({enrolledStudents.length})
-                </h4>
-                <button
-                  onClick={() => setActiveTab('students')}
-                  className="text-xs font-bold text-[#117B78] hover:underline cursor-pointer"
-                >
-                  Manage Students →
-                </button>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-slate-100 gap-2.5">
+                <div>
+                  <h4 className="text-sm font-bold text-slate-900">
+                    Enrolled Students ({enrolledStudents.length})
+                  </h4>
+                  <p className="text-[11px] text-slate-500">
+                    Active cohort learners, attendance compliance, and task grades
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-2 flex-wrap">
+                  {canReviewProgress && enrolledStudents.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setShowCohortProgressModal(true)}
+                      className="flex items-center gap-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 px-3 py-1.5 text-xs font-bold transition cursor-pointer"
+                    >
+                      <TrendingUp className="w-3.5 h-3.5 text-emerald-600" />
+                      <span>Cohort Progress</span>
+                    </button>
+                  )}
+
+                  {canEnrollStudents && (
+                    <button
+                      type="button"
+                      onClick={handleOpenEnrollModal}
+                      className="flex items-center gap-1.5 rounded-xl bg-[#117B78] hover:bg-[#0D9C88] px-3.5 py-1.5 text-xs font-bold text-white transition cursor-pointer shadow-xs"
+                    >
+                      <UserPlus className="w-3.5 h-3.5" />
+                      <span>Enroll Students</span>
+                    </button>
+                  )}
+                </div>
               </div>
 
-              <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-2">
-                {enrolledStudents.map((s) => (
-                  <div
-                    key={s.id}
-                    className="flex items-center gap-2.5 p-2.5 rounded-xl border border-slate-100 bg-white"
-                  >
-                    <div className="h-7 w-7 rounded-lg bg-[#117B78]/10 text-[#117B78] flex items-center justify-center font-bold text-xs shrink-0">
-                      {s.name.charAt(0)}
-                    </div>
-                    <div className="min-w-0">
-                      <p className="text-xs font-bold text-slate-900 truncate">{s.name}</p>
-                      <p className="text-[10px] text-slate-400 truncate">{s.admissionNumber || s.email}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
+              {enrolledStudents.length > 0 ? (
+                <div className="mt-3.5 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {enrolledStudents.map((s) => {
+                    const stats = getStudentCourseStats(s.id, selectedCourse.id);
+                    return (
+                      <div
+                        key={s.id}
+                        className="p-3.5 rounded-2xl border border-slate-200 bg-white hover:border-slate-300 transition flex flex-col justify-between gap-3 shadow-2xs group"
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            <div className="h-9 w-9 rounded-xl bg-[#117B78]/10 text-[#117B78] flex items-center justify-center font-bold text-xs shrink-0">
+                              {s.name.charAt(0)}
+                            </div>
+                            <div className="min-w-0">
+                              <p className="text-xs font-bold text-slate-900 truncate">{s.name}</p>
+                              <p className="text-[10px] text-slate-400 font-mono truncate">
+                                {s.admissionNumber || s.email}
+                              </p>
+                            </div>
+                          </div>
+
+                          {canEnrollStudents && (
+                            <button
+                              type="button"
+                              onClick={() => setStudentToUnenroll(s)}
+                              title="Unenroll student from this course"
+                              className="p-1 rounded-lg text-slate-300 hover:text-rose-600 hover:bg-rose-50 transition cursor-pointer shrink-0"
+                            >
+                              <UserMinus className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                        </div>
+
+                        {/* Metric pills */}
+                        <div className="grid grid-cols-3 gap-1.5 text-center text-[10px] py-1 border-t border-b border-slate-100">
+                          <div className="bg-slate-50 p-1.5 rounded-xl">
+                            <span className="text-slate-400 block text-[9px] font-bold">Attendance</span>
+                            <span
+                              className={`font-bold ${
+                                stats.attnRate >= 80 ? 'text-emerald-700' : 'text-amber-700'
+                              }`}
+                            >
+                              {stats.attnRate}%
+                            </span>
+                          </div>
+                          <div className="bg-slate-50 p-1.5 rounded-xl">
+                            <span className="text-slate-400 block text-[9px] font-bold">Tasks</span>
+                            <span className="font-bold text-blue-700">
+                              {stats.submittedTasks}/{stats.totalTasks}
+                            </span>
+                          </div>
+                          <div className="bg-slate-50 p-1.5 rounded-xl">
+                            <span className="text-slate-400 block text-[9px] font-bold">Points</span>
+                            <span className="font-bold text-amber-700">{stats.pts}</span>
+                          </div>
+                        </div>
+
+                        {/* Review Progress Action */}
+                        {canReviewProgress && (
+                          <button
+                            type="button"
+                            onClick={() => setSelectedStudentForProgress(s)}
+                            className="w-full flex items-center justify-center gap-1.5 py-1.5 rounded-xl bg-slate-50 hover:bg-emerald-50 text-slate-700 hover:text-emerald-800 border border-slate-200 hover:border-emerald-200 text-xs font-bold transition cursor-pointer"
+                          >
+                            <TrendingUp className="w-3.5 h-3.5 text-emerald-600" />
+                            <span>Review Progress</span>
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="mt-4 p-8 text-center rounded-2xl border border-dashed border-slate-200 bg-slate-50/60">
+                  <GraduationCap className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+                  <p className="text-xs font-bold text-slate-700">No students enrolled in this course yet</p>
+                  <p className="text-[11px] text-slate-400 mt-0.5">
+                    Add registered students to this cohort to track attendance and assignments.
+                  </p>
+                  {canEnrollStudents && (
+                    <button
+                      type="button"
+                      onClick={handleOpenEnrollModal}
+                      className="mt-3.5 inline-flex items-center gap-1.5 rounded-xl bg-[#117B78] hover:bg-[#0D9C88] px-4 py-2 text-xs font-bold text-white transition cursor-pointer shadow-xs"
+                    >
+                      <UserPlus className="w-3.5 h-3.5" />
+                      <span>Enroll Students Now</span>
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         ) : (
@@ -984,6 +1246,460 @@ export const CoursesView: React.FC = () => {
             </div>
           </div>
         </div>
+      )}
+
+      {/* 1. ENROLL STUDENTS MODAL */}
+      {showEnrollModal && selectedCourse && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 animate-in fade-in overflow-y-auto">
+          <div className="w-full max-w-lg rounded-3xl bg-white p-6 shadow-2xl border border-slate-100 space-y-5">
+            <div className="flex items-start justify-between pb-3 border-b border-slate-100">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="font-mono text-xs font-bold text-[#117B78] bg-[#117B78]/10 px-2 py-0.5 rounded">
+                    {selectedCourse.code}
+                  </span>
+                  <h3 className="text-base font-bold text-slate-900">Manage Course Enrollment</h3>
+                </div>
+                <p className="text-xs text-slate-500 mt-1">{selectedCourse.name}</p>
+              </div>
+              <button
+                onClick={() => setShowEnrollModal(false)}
+                className="p-1.5 rounded-xl text-slate-400 hover:bg-slate-100 hover:text-slate-700 transition cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Success Feedback */}
+            {enrollFeedback && (
+              <div className="p-3 rounded-2xl bg-emerald-50 border border-emerald-200 text-xs font-bold text-emerald-800 flex items-center gap-2">
+                <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0" />
+                <span>{enrollFeedback}</span>
+              </div>
+            )}
+
+            {/* Toggle Tabs: Select Existing vs Quick Create */}
+            <div className="flex items-center rounded-2xl bg-slate-100 p-1">
+              <button
+                type="button"
+                onClick={() => setEnrollTab('existing')}
+                className={`flex-1 py-2 text-xs font-bold rounded-xl transition cursor-pointer ${
+                  enrollTab === 'existing'
+                    ? 'bg-white text-slate-900 shadow-2xs'
+                    : 'text-slate-500 hover:text-slate-800'
+                }`}
+              >
+                Select Registered Students ({studentsList.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setEnrollTab('new')}
+                className={`flex-1 py-2 text-xs font-bold rounded-xl transition cursor-pointer ${
+                  enrollTab === 'new'
+                    ? 'bg-white text-slate-900 shadow-2xs'
+                    : 'text-slate-500 hover:text-slate-800'
+                }`}
+              >
+                + Quick Add & Enroll
+              </button>
+            </div>
+
+            {/* TAB A: SELECT EXISTING STUDENTS */}
+            {enrollTab === 'existing' && (
+              <div className="space-y-4">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="relative flex-1">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+                    <input
+                      type="text"
+                      placeholder="Search students by name, email, or admission #..."
+                      value={enrollSearch}
+                      onChange={(e) => setEnrollSearch(e.target.value)}
+                      className="w-full h-9 rounded-xl border border-slate-200 bg-white pl-9 pr-3 text-xs text-slate-800 outline-none focus:border-[#117B78]"
+                    />
+                  </div>
+
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedEnrollIds(studentsList.map((s) => s.id))}
+                      className="px-2.5 py-1.5 rounded-lg text-[10px] font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 transition cursor-pointer"
+                    >
+                      Select All
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedEnrollIds([])}
+                      className="px-2.5 py-1.5 rounded-lg text-[10px] font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 transition cursor-pointer"
+                    >
+                      Clear
+                    </button>
+                  </div>
+                </div>
+
+                {/* Students Checklist */}
+                <div className="max-h-60 overflow-y-auto divide-y divide-slate-100 rounded-2xl border border-slate-200 bg-white">
+                  {studentsList
+                    .filter(
+                      (s) =>
+                        s.name.toLowerCase().includes(enrollSearch.toLowerCase()) ||
+                        s.email.toLowerCase().includes(enrollSearch.toLowerCase()) ||
+                        (s.admissionNumber &&
+                          s.admissionNumber.toLowerCase().includes(enrollSearch.toLowerCase()))
+                    )
+                    .map((s) => {
+                      const isChecked = selectedEnrollIds.includes(s.id);
+                      return (
+                        <div
+                          key={s.id}
+                          onClick={() => handleToggleEnrollId(s.id)}
+                          className={`flex items-center justify-between p-3 hover:bg-slate-50 transition cursor-pointer select-none ${
+                            isChecked ? 'bg-emerald-50/40' : ''
+                          }`}
+                        >
+                          <div className="flex items-center gap-3">
+                            <div className="text-[#117B78]">
+                              {isChecked ? (
+                                <CheckSquare className="w-4 h-4 text-[#117B78]" />
+                              ) : (
+                                <Square className="w-4 h-4 text-slate-300" />
+                              )}
+                            </div>
+                            <div>
+                              <p className="text-xs font-bold text-slate-900">{s.name}</p>
+                              <p className="text-[10px] text-slate-400 font-mono">
+                                {s.admissionNumber || s.email}
+                              </p>
+                            </div>
+                          </div>
+
+                          <span
+                            className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                              isChecked
+                                ? 'bg-emerald-100 text-emerald-800'
+                                : 'bg-slate-100 text-slate-400'
+                            }`}
+                          >
+                            {isChecked ? 'Enrolled' : 'Not Enrolled'}
+                          </span>
+                        </div>
+                      );
+                    })}
+
+                  {studentsList.length === 0 && (
+                    <div className="p-6 text-center text-xs text-slate-400">
+                      No students currently registered in directory. Use the "Quick Add" tab above to create one.
+                    </div>
+                  )}
+                </div>
+
+                {/* Footer Save Button */}
+                <div className="flex items-center justify-between pt-2">
+                  <span className="text-xs text-slate-500 font-medium">
+                    <strong className="text-slate-900">{selectedEnrollIds.length}</strong> student(s) selected
+                  </span>
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setShowEnrollModal(false)}
+                      className="px-4 py-2 rounded-xl border border-slate-200 text-xs font-bold text-slate-600 hover:bg-slate-50 transition cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleSaveEnrollments}
+                      className="px-5 py-2 rounded-xl bg-[#117B78] hover:bg-[#0D9C88] text-xs font-bold text-white transition cursor-pointer shadow-xs"
+                    >
+                      Save Enrollments
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* TAB B: QUICK CREATE & ENROLL */}
+            {enrollTab === 'new' && (
+              <form onSubmit={handleQuickAddAndEnroll} className="space-y-3.5">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Full Student Name</label>
+                  <input
+                    type="text"
+                    required
+                    value={quickStudentName}
+                    onChange={(e) => setQuickStudentName(e.target.value)}
+                    placeholder="e.g. Zaid bin Haritha"
+                    className="w-full h-10 rounded-xl border border-slate-200 px-3.5 text-xs text-slate-900 outline-none focus:border-[#117B78]"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Student Email Address</label>
+                  <input
+                    type="email"
+                    required
+                    value={quickStudentEmail}
+                    onChange={(e) => setQuickStudentEmail(e.target.value)}
+                    placeholder="student@institution.local"
+                    className="w-full h-10 rounded-xl border border-slate-200 px-3.5 text-xs text-slate-900 outline-none focus:border-[#117B78]"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">Admission Number</label>
+                    <input
+                      type="text"
+                      value={quickStudentAdmission}
+                      onChange={(e) => setQuickStudentAdmission(e.target.value)}
+                      className="w-full h-10 rounded-xl border border-slate-200 px-3.5 text-xs font-mono text-slate-900 outline-none focus:border-[#117B78]"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">Initial Password</label>
+                    <input
+                      type="text"
+                      value={quickStudentPassword}
+                      onChange={(e) => setQuickStudentPassword(e.target.value)}
+                      className="w-full h-10 rounded-xl border border-slate-200 px-3.5 text-xs font-mono text-slate-900 outline-none focus:border-[#117B78]"
+                    />
+                  </div>
+                </div>
+
+                <div className="p-3 rounded-2xl bg-emerald-50/70 border border-emerald-200/80 text-[11px] text-emerald-900 leading-relaxed">
+                  The new student profile will be registered with role <strong className="font-bold">Student</strong> and automatically enrolled into <strong className="font-bold">{selectedCourse.name}</strong>.
+                </div>
+
+                <div className="flex items-center justify-end gap-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowEnrollModal(false)}
+                    className="px-4 py-2 rounded-xl border border-slate-200 text-xs font-bold text-slate-600 hover:bg-slate-50 transition cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-5 py-2 rounded-xl bg-[#117B78] hover:bg-[#0D9C88] text-xs font-bold text-white transition cursor-pointer shadow-xs"
+                  >
+                    Create & Enroll Now
+                  </button>
+                </div>
+              </form>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* 2. UNENROLL STUDENT CONFIRMATION MODAL */}
+      {studentToUnenroll && selectedCourse && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 animate-in fade-in">
+          <div className="w-full max-w-sm rounded-3xl bg-white p-6 shadow-2xl border border-slate-100 text-center space-y-4">
+            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-amber-100 text-amber-700">
+              <UserMinus className="w-6 h-6" />
+            </div>
+            <div>
+              <h3 className="text-base font-bold text-slate-900">Unenroll Student?</h3>
+              <p className="text-xs text-slate-500 mt-1">
+                Remove <span className="font-bold text-slate-800">{studentToUnenroll.name}</span> from{' '}
+                <span className="font-bold text-slate-800">{selectedCourse.name}</span>?
+              </p>
+              <p className="text-[11px] text-slate-400 mt-1">
+                The student account will remain in the directory and their past records will be preserved.
+              </p>
+            </div>
+            <div className="flex items-center justify-center gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setStudentToUnenroll(null)}
+                className="flex-1 rounded-xl border border-slate-200 py-2.5 text-xs font-bold text-slate-600 hover:bg-slate-50 cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmUnenroll}
+                className="flex-1 rounded-xl bg-amber-600 py-2.5 text-xs font-bold text-white shadow-sm hover:bg-amber-700 cursor-pointer"
+              >
+                Confirm Removal
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 3. COHORT PROGRESS OVERVIEW MODAL */}
+      {showCohortProgressModal && selectedCourse && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 animate-in fade-in overflow-y-auto">
+          <div className="w-full max-w-4xl max-h-[90vh] flex flex-col rounded-3xl bg-white shadow-2xl border border-slate-100 overflow-hidden">
+            {/* Header */}
+            <div className="p-6 bg-gradient-to-r from-slate-900 to-[#117B78] text-white flex items-start justify-between">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="rounded-md bg-white/20 px-2 py-0.5 font-mono text-xs font-bold text-emerald-300">
+                    {selectedCourse.code}
+                  </span>
+                  <h3 className="text-lg font-bold text-white">Cohort Academic Progress Matrix</h3>
+                </div>
+                <p className="text-xs text-slate-300 mt-1">
+                  {selectedCourse.name} • {enrolledStudents.length} enrolled students
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleExportCohortCSV}
+                  className="flex items-center gap-1.5 rounded-xl bg-white/10 hover:bg-white/20 px-3 py-1.5 text-xs font-bold text-white transition cursor-pointer"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  <span>Export CSV</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowCohortProgressModal(false)}
+                  className="p-1.5 rounded-xl text-slate-300 hover:bg-white/10 hover:text-white transition cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+
+            {/* Filter bar */}
+            <div className="p-4 bg-slate-50 border-b border-slate-200/80 flex items-center justify-between gap-3">
+              <div className="relative max-w-xs flex-1">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+                <input
+                  type="text"
+                  placeholder="Filter cohort members..."
+                  value={cohortSearch}
+                  onChange={(e) => setCohortSearch(e.target.value)}
+                  className="w-full h-9 rounded-xl border border-slate-200 bg-white pl-9 pr-3 text-xs text-slate-800 outline-none focus:border-[#117B78]"
+                />
+              </div>
+
+              <div className="text-xs text-slate-500 font-semibold">
+                Cohort Size: <strong className="text-slate-900">{enrolledStudents.length}</strong> learners
+              </div>
+            </div>
+
+            {/* Table */}
+            <div className="flex-1 overflow-y-auto p-6">
+              <div className="rounded-2xl border border-slate-200 overflow-hidden bg-white">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-slate-50 text-slate-500 font-bold border-b border-slate-200">
+                    <tr>
+                      <th className="py-3 px-4">Student</th>
+                      <th className="py-3 px-4">Attendance Rate</th>
+                      <th className="py-3 px-4">Assignments</th>
+                      <th className="py-3 px-4">Points</th>
+                      <th className="py-3 px-4">Academic Standing</th>
+                      <th className="py-3 px-4 text-right">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {enrolledStudents
+                      .filter(
+                        (s) =>
+                          s.name.toLowerCase().includes(cohortSearch.toLowerCase()) ||
+                          s.email.toLowerCase().includes(cohortSearch.toLowerCase())
+                      )
+                      .map((s) => {
+                        const stats = getStudentCourseStats(s.id, selectedCourse.id);
+                        const isHigh = stats.attnRate >= 80 && stats.taskRate >= 75;
+                        const isMid = stats.attnRate >= 60;
+                        return (
+                          <tr key={s.id} className="hover:bg-slate-50/70 transition">
+                            <td className="py-3.5 px-4">
+                              <div className="flex items-center gap-2.5">
+                                <div className="h-8 w-8 rounded-lg bg-[#117B78]/10 text-[#117B78] flex items-center justify-center font-bold text-xs shrink-0">
+                                  {s.name.charAt(0)}
+                                </div>
+                                <div>
+                                  <p className="font-bold text-slate-900">{s.name}</p>
+                                  <p className="text-[10px] text-slate-400 font-mono">
+                                    {s.admissionNumber || s.email}
+                                  </p>
+                                </div>
+                              </div>
+                            </td>
+
+                            <td className="py-3.5 px-4">
+                              <div className="flex items-center gap-2">
+                                <span
+                                  className={`font-bold ${
+                                    stats.attnRate >= 80
+                                      ? 'text-emerald-700'
+                                      : stats.attnRate >= 60
+                                      ? 'text-amber-700'
+                                      : 'text-rose-600'
+                                  }`}
+                                >
+                                  {stats.attnRate}%
+                                </span>
+                                <span className="text-[10px] text-slate-400">
+                                  ({stats.totalSessions} sessions)
+                                </span>
+                              </div>
+                            </td>
+
+                            <td className="py-3.5 px-4">
+                              <span className="font-bold text-blue-700">
+                                {stats.submittedTasks} / {stats.totalTasks}
+                              </span>
+                              <span className="text-[10px] text-slate-400 ml-1">({stats.taskRate}%)</span>
+                            </td>
+
+                            <td className="py-3.5 px-4 font-mono font-bold text-amber-700">
+                              {stats.pts} pts
+                            </td>
+
+                            <td className="py-3.5 px-4">
+                              <span
+                                className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+                                  isHigh
+                                    ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                                    : isMid
+                                    ? 'bg-teal-50 text-teal-800 border-teal-200'
+                                    : 'bg-rose-50 text-rose-800 border-rose-200'
+                                }`}
+                              >
+                                {isHigh ? 'Outstanding' : isMid ? 'Consistent' : 'Needs Review'}
+                              </span>
+                            </td>
+
+                            <td className="py-3.5 px-4 text-right">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setSelectedStudentForProgress(s);
+                                  setShowCohortProgressModal(false);
+                                }}
+                                className="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-[#117B78] hover:text-white text-xs font-bold text-slate-700 transition cursor-pointer inline-flex items-center gap-1.5"
+                              >
+                                <TrendingUp className="w-3.5 h-3.5" />
+                                <span>Review</span>
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 4. INDIVIDUAL STUDENT PROGRESS MODAL */}
+      {selectedStudentForProgress && (
+        <StudentProgressModal
+          student={selectedStudentForProgress}
+          initialCourseId={selectedCourse?.id}
+          onClose={() => setSelectedStudentForProgress(null)}
+        />
       )}
     </div>
   );

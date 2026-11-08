@@ -1,3 +1,5 @@
+'use client';
+
 import React, { useState, useRef, useEffect } from 'react';
 import {
   Database,
@@ -20,8 +22,10 @@ export const DatabaseStatusBadge: React.FC<{ compact?: boolean }> = ({ compact =
     isDatabaseConnected,
     isSyncing,
     lastSyncTime,
-    firebaseProjectId,
-    firestoreDatabaseId,
+    neonHost,
+    neonDatabase,
+    neonRegion,
+    neonLatency,
     refreshDatabaseSync,
     courses,
     users,
@@ -31,7 +35,7 @@ export const DatabaseStatusBadge: React.FC<{ compact?: boolean }> = ({ compact =
 
   const [isOpen, setIsOpen] = useState(false);
   const [isPinging, setIsPinging] = useState(false);
-  const [pingLatency, setPingLatency] = useState<number | null>(null);
+  const [pingLatency, setPingLatency] = useState<number | null>(neonLatency);
   const popoverRef = useRef<HTMLDivElement>(null);
 
   // Close on outside click
@@ -73,10 +77,10 @@ export const DatabaseStatusBadge: React.FC<{ compact?: boolean }> = ({ compact =
             ? 'bg-emerald-50/80 border-emerald-200 text-emerald-800 hover:bg-emerald-100/70 hover:border-emerald-300'
             : 'bg-amber-50 border-amber-200 text-amber-800 hover:bg-amber-100'
         }`}
-        title="Click for live Firestore database status"
+        title="Click for live Neon PostgreSQL database status"
       >
         <div className="relative flex items-center justify-center">
-          <Database className="w-3.5 h-3.5 shrink-0" />
+          <Database className="w-3.5 h-3.5 shrink-0 text-[#00E599]" />
           <span
             className={`absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full ${
               isDatabaseConnected ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'
@@ -86,10 +90,10 @@ export const DatabaseStatusBadge: React.FC<{ compact?: boolean }> = ({ compact =
 
         <div className="hidden sm:flex flex-col text-left leading-none">
           <span className="text-[10px] font-bold tracking-tight">
-            {isDatabaseConnected ? 'Firestore Connected' : 'Connecting DB...'}
+            {isDatabaseConnected ? 'Neon PostgreSQL' : 'Connecting DB...'}
           </span>
           <span className="text-[8px] text-emerald-700/80 font-mono mt-0.5 font-semibold">
-            {isSyncing ? 'Syncing...' : 'Live Real-time'}
+            {isSyncing ? 'Syncing...' : 'Connected (AWS)'}
           </span>
         </div>
 
@@ -102,17 +106,17 @@ export const DatabaseStatusBadge: React.FC<{ compact?: boolean }> = ({ compact =
           {/* Header */}
           <div className="flex items-center justify-between border-b border-slate-100 pb-3">
             <div className="flex items-center gap-2.5">
-              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-100 text-emerald-800">
-                <Cloud className="w-5 h-5" />
+              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#00E599]/15 text-[#00A86B]">
+                <Database className="w-5 h-5" />
               </div>
               <div>
                 <div className="flex items-center gap-1.5">
-                  <h4 className="text-xs font-bold text-slate-900">Cloud Firestore</h4>
+                  <h4 className="text-xs font-bold text-slate-900">Neon PostgreSQL</h4>
                   <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[9px] font-bold text-emerald-800 border border-emerald-200">
-                    Live Database
+                    Serverless Active
                   </span>
                 </div>
-                <p className="text-[10px] text-slate-500">Google Cloud Firestore Integration</p>
+                <p className="text-[10px] text-slate-500">PostgreSQL 18 • Pooled Connection</p>
               </div>
             </div>
 
@@ -120,7 +124,7 @@ export const DatabaseStatusBadge: React.FC<{ compact?: boolean }> = ({ compact =
               onClick={handlePing}
               disabled={isPinging}
               className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-[10px] font-bold text-slate-700 transition cursor-pointer disabled:opacity-50"
-              title="Ping Firestore database"
+              title="Ping Neon PostgreSQL database"
             >
               <RefreshCw className={`w-3 h-3 ${isPinging ? 'animate-spin' : ''}`} />
               <span>{isPinging ? 'Pinging...' : 'Ping DB'}</span>
@@ -132,9 +136,9 @@ export const DatabaseStatusBadge: React.FC<{ compact?: boolean }> = ({ compact =
             <div className="flex items-start gap-2">
               <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
               <div>
-                <p className="font-semibold text-slate-900">Cross-Browser Live Synchronization</p>
+                <p className="font-semibold text-slate-900">Live PostgreSQL Cloud Synchronization</p>
                 <p className="text-[10px] text-slate-500 mt-0.5">
-                  Deletions, additions, and edits sync to Google Cloud in real-time. Changes made in one browser window immediately reflect across all other browsers.
+                  Connected directly to Neon Serverless PostgreSQL with auto-scaling connection pooling. Multi-tab synchronization and atomic ACID writes active.
                 </p>
               </div>
             </div>
@@ -144,19 +148,28 @@ export const DatabaseStatusBadge: React.FC<{ compact?: boolean }> = ({ compact =
           <div className="mt-3 space-y-2 text-xs">
             <div className="flex items-center justify-between p-2 rounded-xl bg-slate-50 border border-slate-100">
               <span className="text-[11px] font-medium text-slate-500 flex items-center gap-1.5">
-                <Server className="w-3.5 h-3.5 text-slate-400" /> Database ID:
+                <Server className="w-3.5 h-3.5 text-slate-400" /> Database Name:
               </span>
-              <span className="text-[10px] font-mono font-bold text-slate-900 truncate max-w-[190px]" title={firestoreDatabaseId}>
-                {firestoreDatabaseId}
+              <span className="text-[10px] font-mono font-bold text-slate-900" title={neonDatabase || 'neondb'}>
+                {neonDatabase || 'neondb'}
               </span>
             </div>
 
             <div className="flex items-center justify-between p-2 rounded-xl bg-slate-50 border border-slate-100">
               <span className="text-[11px] font-medium text-slate-500 flex items-center gap-1.5">
-                <Cloud className="w-3.5 h-3.5 text-slate-400" /> Firebase Project:
+                <Cloud className="w-3.5 h-3.5 text-slate-400" /> Neon Host:
+              </span>
+              <span className="text-[10px] font-mono font-bold text-slate-900 truncate max-w-[200px]" title={neonHost}>
+                {neonHost}
+              </span>
+            </div>
+
+            <div className="flex items-center justify-between p-2 rounded-xl bg-slate-50 border border-slate-100">
+              <span className="text-[11px] font-medium text-slate-500 flex items-center gap-1.5">
+                <Layers className="w-3.5 h-3.5 text-slate-400" /> Region:
               </span>
               <span className="text-[10px] font-mono font-bold text-slate-900">
-                {firebaseProjectId}
+                {neonRegion || 'AWS ap-southeast-1'}
               </span>
             </div>
 
@@ -169,13 +182,13 @@ export const DatabaseStatusBadge: React.FC<{ compact?: boolean }> = ({ compact =
               </span>
             </div>
 
-            {pingLatency !== null && (
+            {(pingLatency !== null || neonLatency !== null) && (
               <div className="flex items-center justify-between p-2 rounded-xl bg-emerald-50/60 border border-emerald-100">
                 <span className="text-[11px] font-medium text-emerald-800 flex items-center gap-1.5">
-                  <Activity className="w-3.5 h-3.5 text-emerald-600" /> Round-Trip Latency:
+                  <Activity className="w-3.5 h-3.5 text-emerald-600" /> Latency:
                 </span>
                 <span className="text-[11px] font-mono font-bold text-emerald-700">
-                  {pingLatency} ms (Fast)
+                  {pingLatency ?? neonLatency} ms (Fast)
                 </span>
               </div>
             )}
@@ -184,7 +197,7 @@ export const DatabaseStatusBadge: React.FC<{ compact?: boolean }> = ({ compact =
           {/* Active Synced Collections Overview */}
           <div className="mt-3 pt-2.5 border-t border-slate-100">
             <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-2">
-              Live Cloud Records Count:
+              Neon PostgreSQL Records Count:
             </p>
             <div className="grid grid-cols-4 gap-1.5 text-center">
               <div className="p-1.5 rounded-lg bg-slate-50 border border-slate-100">
