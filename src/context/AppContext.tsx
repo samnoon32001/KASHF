@@ -1,6 +1,6 @@
 'use client';
 
-import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
+import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
 import { onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
 import {
   UserProfile,
@@ -175,7 +175,7 @@ export const INITIAL_SUPER_ADMIN: UserProfile = {
   id: 'user-super-admin',
   name: 'Super Administrator',
   username: 'admin',
-  password: 'KashfAdmin@2026#Secure',
+  password: 'KI@202526',
   email: 'admin@institution.local',
   role: 'super_admin',
   department: 'Executive Operations',
@@ -294,16 +294,33 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   });
 
+  const isGoogleLoginInProgress = useRef(false);
+
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(() => {
     try {
-      const savedLocal = localStorage.getItem(STORAGE_KEY + '_active_user');
-      if (savedLocal) return JSON.parse(savedLocal);
-      const savedSession = sessionStorage.getItem(STORAGE_KEY + '_active_user');
-      if (savedSession) return JSON.parse(savedSession);
+      if (typeof window !== 'undefined') {
+        // Strictly purge any persistent auto-login from localStorage
+        localStorage.removeItem(STORAGE_KEY + '_active_user');
+        localStorage.removeItem('kashf_saved_password');
+
+        // Only allow active session from sessionStorage (cleared when browser or tab closes)
+        const savedSession = sessionStorage.getItem(STORAGE_KEY + '_active_user');
+        if (savedSession) {
+          const parsed = JSON.parse(savedSession);
+          const user: UserProfile = parsed.user || parsed;
+          const sessionStart = parsed.sessionStartTime || parsed.lastActiveTime || Date.now();
+          // Invalidate sessions older than 8 hours
+          if (user && user.id && Date.now() - sessionStart < 8 * 60 * 60 * 1000) {
+            return user;
+          } else {
+            sessionStorage.removeItem(STORAGE_KEY + '_active_user');
+          }
+        }
+      }
     } catch {
       // ignore
     }
-    return null; // Secured: User must explicitly log in!
+    return null; // Secured: User must explicitly log in when opening the software!
   });
 
   const [roles, setRoles] = useState<RoleDefinition[]>(() => {
@@ -679,12 +696,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       localStorage.setItem(STORAGE_KEY + '_audit', JSON.stringify(auditLogs));
       localStorage.setItem(STORAGE_KEY + '_settings', JSON.stringify(settings));
       localStorage.setItem(STORAGE_KEY + '_points', JSON.stringify(pointsHistory));
+      // Maintain active session strictly in sessionStorage only
       if (currentUser) {
-        localStorage.setItem(STORAGE_KEY + '_active_user', JSON.stringify(currentUser));
+        const sessionPayload = {
+          user: currentUser,
+          sessionStartTime: Date.now(),
+          lastActiveTime: Date.now(),
+        };
+        sessionStorage.setItem(STORAGE_KEY + '_active_user', JSON.stringify(sessionPayload));
       } else {
-        localStorage.removeItem(STORAGE_KEY + '_active_user');
         sessionStorage.removeItem(STORAGE_KEY + '_active_user');
       }
+      // Guarantee localStorage NEVER stores active user session
+      localStorage.removeItem(STORAGE_KEY + '_active_user');
     } catch (e) {
       console.warn('Storage sync failed', e);
     }
@@ -708,37 +732,61 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     currentUser,
   ]);
 
-  // Firebase Auth state listener - Only authorize users created by Super Admin
+  // Firebase Auth state listener - Only authorize users created by Super Admin if explicitly signed in
   useEffect(() => {
+    // If no active session exists in sessionStorage on startup, sign out Firebase to prevent background auto-login
+    try {
+      if (typeof window !== 'undefined') {
+        const activeSession = sessionStorage.getItem(STORAGE_KEY + '_active_user');
+        if (!activeSession) {
+          logoutUser().catch(() => {});
+        }
+      }
+    } catch {}
+
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       setFirebaseUser(user);
       if (user && user.email) {
-        setUsers((prevUsers) => {
-          const userEmail = user.email!.toLowerCase();
-          const existing = prevUsers.find((u) => u.email.toLowerCase() === userEmail);
+        const hasSession = typeof window !== 'undefined' && !!sessionStorage.getItem(STORAGE_KEY + '_active_user');
+        if (hasSession || isGoogleLoginInProgress.current) {
+          isGoogleLoginInProgress.current = false;
+          setUsers((prevUsers) => {
+            const userEmail = user.email!.toLowerCase();
+            const existing = prevUsers.find((u) => u.email.toLowerCase() === userEmail);
 
-          if (!existing) {
-            console.warn(`[Auth] Blocked unauthorized login for: ${userEmail}. Account must be created by Super Admin.`);
-            logoutUser().catch(() => {});
-            return prevUsers;
-          }
+            if (!existing) {
+              console.warn(`[Auth] Blocked unauthorized login for: ${userEmail}. Account must be created by Super Admin.`);
+              logoutUser().catch(() => {});
+              return prevUsers;
+            }
 
-          if (existing.status === 'inactive') {
-            console.warn(`[Auth] Blocked deactivated user: ${userEmail}`);
-            logoutUser().catch(() => {});
-            return prevUsers;
-          }
+            if (existing.status === 'inactive') {
+              console.warn(`[Auth] Blocked deactivated user: ${userEmail}`);
+              logoutUser().catch(() => {});
+              return prevUsers;
+            }
 
-          // User was created by Super Admin and is active
-          const updated = {
-            ...existing,
-            lastLogin: new Date().toISOString(),
-            photoUrl: user.photoURL || existing.photoUrl,
-          };
-          setCurrentUser(updated);
-          saveDocument('users', updated).catch(() => {});
-          return prevUsers.map((u) => (u.id === existing.id ? updated : u));
-        });
+            // User was created by Super Admin and is active
+            const updated = {
+              ...existing,
+              lastLogin: new Date().toISOString(),
+              photoUrl: user.photoURL || existing.photoUrl,
+            };
+            setCurrentUser(updated);
+            const sessionData = {
+              user: updated,
+              sessionStartTime: Date.now(),
+              lastActiveTime: Date.now(),
+            };
+            sessionStorage.setItem(STORAGE_KEY + '_active_user', JSON.stringify(sessionData));
+            localStorage.removeItem(STORAGE_KEY + '_active_user');
+            saveDocument('users', updated).catch(() => {});
+            return prevUsers.map((u) => (u.id === existing.id ? updated : u));
+          });
+        } else {
+          // No active session in this tab/window: sign out background Firebase session
+          logoutUser().catch(() => {});
+        }
       }
       setAuthLoading(false);
     });
@@ -753,8 +801,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   }, [currentUser]);
 
-  const activeRole = currentUser?.role || 'super_admin';
-  const currentRoleDefinition = roles.find((r) => r.roleKey === activeRole);
+  const activeRole: UserRole = currentUser?.role || 'student';
+  const currentRoleDefinition = currentUser ? roles.find((r) => r.roleKey === activeRole) : undefined;
 
   const can = useCallback(
     (permission: string) => {
@@ -811,13 +859,41 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // Authentication methods - Strict credentials check, no backdoors
   const loginWithCredentials = async (identifier: string, pass: string, rememberMe = true): Promise<boolean> => {
     const cleanId = identifier.trim().toLowerCase();
+    const cleanPass = pass.trim();
 
-    // Match by username or email
-    const matched = users.find(
+    if (!cleanId || !cleanPass) {
+      throw new Error('Please enter both username/email and password.');
+    }
+
+    // Match by username or email in in-memory state
+    let matched = users.find(
       (u) =>
         (u.username && u.username.toLowerCase() === cleanId) ||
         (u.email && u.email.toLowerCase() === cleanId)
     );
+
+    // If not found in local memory or if password does not match, fetch authoritative fresh users from Neon PostgreSQL
+    if (!matched || matched.password !== cleanPass) {
+      try {
+        const res = await fetch('/api/db/collections/users');
+        if (res.ok) {
+          const json = await res.json();
+          if (json.success && Array.isArray(json.data)) {
+            setUsers(json.data);
+            const dbMatched = json.data.find(
+              (u: UserProfile) =>
+                (u.username && u.username.toLowerCase() === cleanId) ||
+                (u.email && u.email.toLowerCase() === cleanId)
+            );
+            if (dbMatched) {
+              matched = dbMatched;
+            }
+          }
+        }
+      } catch (e) {
+        console.warn('Fallback Neon user query during login:', e);
+      }
+    }
 
     if (!matched) {
       logAudit('LOGIN_FAILED', 'Auth', `Failed login attempt for unknown user: ${cleanId}`);
@@ -831,12 +907,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     // Strict password match ONLY - absolutely no backdoors or default fallbacks
     const expectedPass = matched.password;
-    if (!expectedPass || pass !== expectedPass) {
+    if (!expectedPass || cleanPass !== expectedPass) {
       logAudit('LOGIN_FAILED', 'Auth', `Invalid password attempt for ${matched.name} (${cleanId})`);
       throw new Error('Invalid username/email or password.');
     }
 
-    const updated = {
+    const updated: UserProfile = {
       ...matched,
       lastLogin: new Date().toISOString(),
     };
@@ -847,13 +923,27 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       saveDocument('users', updated);
     } catch {}
 
+    // Store active session ONLY in sessionStorage (cleared when browser or tab closes)
+    const sessionData = {
+      user: updated,
+      sessionStartTime: Date.now(),
+      lastActiveTime: Date.now(),
+    };
+    try {
+      sessionStorage.setItem(STORAGE_KEY + '_active_user', JSON.stringify(sessionData));
+      localStorage.removeItem(STORAGE_KEY + '_active_user'); // NEVER retain active session in localStorage
+    } catch {}
+
+    // Remember Username preference (stores ONLY username string, never password or active session)
     if (rememberMe) {
       try {
-        localStorage.setItem(STORAGE_KEY + '_active_user', JSON.stringify(updated));
+        localStorage.setItem('kashf_saved_username', cleanId);
+        localStorage.setItem('kashf_remember_me', 'true');
       } catch {}
     } else {
       try {
-        sessionStorage.setItem(STORAGE_KEY + '_active_user', JSON.stringify(updated));
+        localStorage.removeItem('kashf_saved_username');
+        localStorage.setItem('kashf_remember_me', 'false');
       } catch {}
     }
 
@@ -866,11 +956,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const handleGoogleLogin = async () => {
     try {
+      isGoogleLoginInProgress.current = true;
       const user = await loginWithGoogle();
       if (user) {
         logAudit('GOOGLE_LOGIN', 'Auth', `Google authentication success for ${user.email}`);
       }
     } catch (err) {
+      isGoogleLoginInProgress.current = false;
       logAudit('LOGIN_FAILED', 'Auth', `Google login failed: ${err instanceof Error ? err.message : String(err)}`);
       throw err;
     }
@@ -880,8 +972,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const userIdentifier = currentUser?.email || currentUser?.username || 'User';
     logAudit('LOGOUT', 'Auth', `User logged out: ${userIdentifier}`);
     try {
-      localStorage.removeItem(STORAGE_KEY + '_active_user');
       sessionStorage.removeItem(STORAGE_KEY + '_active_user');
+      localStorage.removeItem(STORAGE_KEY + '_active_user');
       localStorage.removeItem('kashf_saved_password');
     } catch (e) {
       console.warn('Storage cleanup failed on logout', e);

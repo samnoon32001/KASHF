@@ -68,10 +68,11 @@ const MainLayout: React.FC = () => {
 
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
-  // Clean up legacy plaintext password storage if present
+  // Clean up legacy plaintext password storage and old active_user persistence if present
   useEffect(() => {
     if (typeof window !== 'undefined') {
       localStorage.removeItem('kashf_saved_password');
+      localStorage.removeItem('kashf_lms_v1_state_active_user');
     }
   }, []);
 
